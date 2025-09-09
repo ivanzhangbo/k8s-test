@@ -1,21 +1,20 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: hello-app
+  name: guestbook-ui
 spec:
   replicas: 1
+  revisionHistoryLimit: 3
   selector:
     matchLabels:
-      app: hello-app
+      app: guestbook-ui
   template:
     metadata:
       labels:
-        app: hello-app
+        app: guestbook-ui
     spec:
       containers:
-      - name: hello-app
-        image: hashicorp/http-echo
-        args:
-          - "-text=hello from EC2 k8s"
-        ports:
-        - containerPort: 5678
+        - image: gcr.io/google-samples/gb-frontend:v5
+          name: guestbook-ui
+          ports:
+            - containerPort: 80
