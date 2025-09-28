@@ -1,1 +1,17 @@
 https://cloud.google.com/kubernetes-engine/docs/concepts/gateway-api?hl=ja#ingress_and_gateway
+
+| 項目                   | Ingress                                                                                   | Gateway API（GKE Gateway コントローラ）                                                                                |
+| -------------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| ステータス / 将来性          | 既存実績が豊富。Google は引き続きサポート                                                                  | GKE で GA（本番利用可）であり、今後の戦略的方向性として推奨されている ([Google Cloud][1])                                                     |
+| リソースの分離 / 所有権        | Ingress にルールを詰め込む → インフラとアプリの境界が曖昧になりやすい                                                  | Gateway（フロント設定）／HTTPRoute（ルーティング）等に分離でき、インフラ運用チームとアプリチームで責任を分けやすい ([Google Cloud][2])                          |
+| 拡張性 / 高度なルーティング      | 多くはアノテーションで追加機能を持たせる。拡張性は制限されがち                                                           | トラフィック分割（ウェイト）、ミラーリング、複雑なマッチ／フィルタリングなどがネイティブにサポート可能な設計 ([Google Cloud][2])                                     |
+| マルチクラスタ / マルチリージョン対応 | Ingress 単体では制約が大きい                                                                        | GKE Gateway コントローラはマルチクラスタ Gateway をサポート（複数クラスタ／リージョンに跨る Gateway） ([Google Cloud][1])                          |
+| 証明書 / HTTPS 管理       | Google 管理証明書 (Managed SSL) との連携が可能。ただし CDN やプロキシとの整合性に制約あり ([Google Developer forums][3]) | Gateway API 経由で Certificate Manager を利用しやすく、ドメイン認証や証明書更新が柔軟（CDN 等を前置した環境とも相性良い） ([Google Developer forums][3]) |
+| CDN 利用との相性           | Cloud CDN を有効にできる（LB → BackendConfig 等で設定）                                                | （現時点では）Cloud CDN と統合された構成が制限されている場合あり                                                                          |
+| コントローラの配置 / 性能       | Ingress コントローラがクラスター内で動作                                                                  | GKE の Gateway コントローラはユーザークラスタ外（Google 管理）で管理され、クラスタ内負荷を抑える構成 ([Google Cloud][1])                               |
+| 移行容易性                | 既存構成が Ingress ベースの場合、変更コストが低め                                                             | Ingress から Gateway + HTTPRoute への “変換” がサポートされており、段階移行可能 ([Google Cloud][1])                                   |
+| 制約 / 注意点             | アノテーション依存になりがち / 複雑なルールを入れると拡張性で困ることがある                                                   | 一部のプロトコルサポート（TCP/UDP/TLSRoute など）はまだ制限あり（バージョンで変化あり）                                                           |
+
+[1]: https://cloud.google.com/kubernetes-engine/docs/concepts/gateway-api?utm_source=chatgpt.com "About Gateway API | GKE networking"
+[2]: https://cloud.google.com/blog/products/containers-kubernetes/use-gateway-api-for-external-ingress-in-gke/?utm_source=chatgpt.com "Use gateway api for external ingress in gke"
+[3]: https://discuss.google.dev/t/gke-ingress-and-cdn/136002?utm_source=chatgpt.com "GKE Ingress and CDN - Google Developer forums"
