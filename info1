@@ -1,3 +1,7 @@
+Kubernetes の API リソースで、HTTP/HTTPS のトラフィックをクラスタ外部 → サービス内部へルーティングするゲートウェイとして振る舞う。
+Gateway API は、Kubernetes の Ingress の後続／拡張を目指す新しい API モデルで、Ingress が注釈（Annotations）に頼る拡張を構造化モデルに置き換える設計。
+Gateway API は v1.0 で GA 済み
+
 https://cloud.google.com/kubernetes-engine/docs/concepts/gateway-api?hl=ja#ingress_and_gateway
 
 | 項目                   | Ingress                                                                                   | Gateway API（GKE Gateway コントローラ）                                                                                |
