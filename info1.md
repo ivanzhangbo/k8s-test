@@ -1,4 +1,5 @@
-了解です。いただいた現状メモをもとに、方式設計書の「POD設計方針」章としてそのまま流用しやすい形に整理しました。GKE（Standard/Autopilot 共通）でのベストプラクティスと差分も織り込み、根拠は公式ドキュメントへ添付しています。
+https://docs.aws.amazon.com/ja_jp/AmazonCloudFront/latest/DeveloperGuide/using-https-cloudfront-to-custom-origin.html
+https://techdocs.akamai.com/property-mgr/docs/custom-origin-prerequisites#use-a-custom-certificate-authority
 
 # POD設計方針（GKE移行対応）
 
