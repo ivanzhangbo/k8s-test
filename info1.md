@@ -1,63 +1,79 @@
-了解です。画像の表を前提に、**「サービスレベル値（GCP）」列の記入文例**を“現行踏襲＋GKE 依存は共通基盤準拠、POD 周りは明確化”の方針で簡潔にまとめました。表へそのまま貼れる粒度です。
+承知しました。いただいた前提をもとに、「POD 前段のロードバランシング設計方針」の章として整理しました。方式設計書にそのまま記載できるレベルでまとめています。
 
 ---
 
-# サービスレベル値（GCP）— 記入案
+# POD前段ロードバランシング設計方針（GKE移行対応）
 
-## 1. 可用性
+## 1. 基本方針
 
-* **時間要件方針／業務拠点の要件（HW/SW）**
-  現行値を踏襲。GKE 依存部分は**共通基盤要件に準拠**（Regional GKE／マルチゾーン、ノード自動修復、計画メンテ運用）。
-  ※Web は**ステートレス**前提、セッションは外部化（キャッシュ等）し POD 再作成時の業務影響を最小化。
-
-* **サービス開始時間**
-  現行値を踏襲。初回起動遅延は **startupProbe** で吸収し、**readinessProbe** 合致時に受流開始。
-
-* **業務継続性：RPO／RTO**
-  現行値を踏襲。POD は再作成で即時復旧可能（**RollingUpdate＋PDB**で無停止切替）。データ系は**共通基盤のバックアップ／レプリケーション方針**に従う。
-
-* **業務継続時：代替業務運用の範囲**
-  現行運用マニュアルを踏襲。GKE 障害時は**マルチゾーン継続前提**、広域障害時の手順は**共通基盤 DR 手順**に準拠。
-
-## 2. 拡張性設計
-
-* **仮想・コンテナ構成**
-  現行踏襲。**Cloud Native 構成**（Deployment＋Service＋Ingress/Gateway）とし、構成管理は GitOps に統一。
-
-* **自動拡張性**
-  **HPA（CPU/応答時間など）**で POD を自動スケール。ノードは**Cluster Autoscaler**（共通基盤設定）に準拠。上限/下限は**Namespace の ResourceQuota/LimitRange**で統制。
-
-## 3. セキュリティ（診断・運用）
-
-* **ネットワーク診断・脆弱性対策**
-  **共通基盤要件に準拠**（VPC セグメント分離、Private GKE、必要に応じ Cloud Armor/WAF）。
-  POD は**非特権実行（runAsNonRoot/不可昇格/ReadOnlyRootFS）**を原則。イメージは署名・スキャン済みを使用。
-
-* **Web/AP 監視・診断**
-  **Cloud Logging/Monitoring** を用い、**4xx/5xx、レイテンシ、readiness 失敗、再起動回数**でアラート。外形監視は**共通基盤の監視ポリシー**に準拠。
-
-## 4. 運用（更新・停止・復旧）
-
-* **デプロイ方式**
-  **RollingUpdate（maxUnavailable:0 / maxSurge:1）**を標準。`revisionHistoryLimit` は現行値（例：2）踏襲し、最小限のロールバック世代を保持。
-
-* **停止影響の抑制**
-  **PodDisruptionBudget（PDB）**と**preStop＋猶予（terminationGracePeriod）**でドレインを保証。`readiness` と **LB 健全性**を一致させ無流入で終了。
-
-* **ログ／トレース**
-  アプリログは **stdout/stderr** へ出力し Cloud Logging へ集約（PV 直接出力は廃止）。必要に応じトレース（Cloud Trace）を適用。
+* オンプレミス環境では **Akamai → ALB → Nginx Pod** という構成を採用している。
+* GKE 移行後も、**Akamai との接続点として ALB を維持**し、既存構成の互換性を確保する。
+* GKE における ALB 作成方式や、内部通信におけるロードバランシング方式は複数の実現手段があるため、**詳細設計フェーズで比較検討を行い、要件（可用性・運用性・コスト）に従って決定**する。
 
 ---
 
-# POD 周りの記述（表の脚注や別欄に追記）
+## 2. ALB 配置パターンと作成方式
 
-* **プローブ**：`startupProbe`（起動待ち）／`readinessProbe`（受流判定）／`livenessProbe`（自己回復）を分離し設定。
-* **配置**：`topologySpreadConstraints`（zone→node 均等）＋必要に応じ `podAntiAffinity`。
-* **更新**：`RollingUpdate` 基本、`Recreate` は計画停止時のみ。`revisionHistoryLimit` は現行踏襲。
-* **資源**：各コンテナに `requests/limits` を必須化。Namespace に **ResourceQuota/LimitRange** を適用。
-* **通信**：POD 間は **Service（ClusterIP）** 経由。外部公開は **Ingress / Gateway API**（共通基盤方針）に従う。
-* **監査**：イメージはレジストリ制御下で供給、脆弱性スキャン結果をリリース判定に使用（共通基盤準拠）。
+### (1) 外部公開用（Nginx Pod 前段）
+
+* **Akamai CDN → ALB → Nginx Pod**
+* ALB 作成方式は 2 パターンを候補とする：
+
+  1. **Gateway/Ingress からの ALB 自動作成**
+
+     * GKE 標準の Ingress/Gateway API を利用し、Service をバックエンドとしたマネージド ALB を自動作成。
+     * メリット：管理が Kubernetes マニフェストに一元化される。
+     * デメリット：高度な ALB 設定の自由度が制約される。
+  2. **手動 ALB 作成＋Service(NodePort) バックエンド連携**
+
+     * GCP コンソールや IaC で ALB を手動構築し、Service(NodePort) をバックエンドに登録。
+     * メリット：細かい ALB 設定や既存運用手順を踏襲可能。
+     * デメリット：K8S のリソースと分離するため、運用二重化のリスクあり。
+* どちらを採用するかは **詳細設計フェーズにて個別検討**する。
 
 ---
 
-必要なら、表に直接貼れる**1セル用の短文化テキスト**（改行なし版）も作ります。
+### (2) 内部通信用（Vue Pod ↔ Front Pod）
+
+* **内部 ALB 作成** または **GKE 内部 Service（ClusterIP/Internal LoadBalancer）利用**の2案を検討。
+
+  * **内部 ALB**
+
+    * メリット：オンプレや他VPCとの連携、Akamai 以外の外部システム接続が将来必要な場合に有効。
+    * デメリット：構築・運用がやや複雑。
+  * **GKE Service (ClusterIP/Internal LoadBalancer)**
+
+    * メリット：Kubernetes ネイティブでシンプルに構成可能。
+    * デメリット：クラスタ外アクセスとの連携は制約あり。
+* 採用方針は **対象システムの通信要件を精査の上で詳細設計にて決定**する。
+
+---
+
+## 3. ヘルスチェック方針
+
+* ALB を Gateway/Ingress から作成する場合、**ヘルスチェック方式は複数の選択肢が存在**する：
+
+  * **readinessProbe 推論方式**（Pod の readinessProbe 定義をヘルスチェックに自動反映）
+  * **BackendConfig による明示指定**（HTTP path, port, interval などを個別定義）
+  * **デフォルトチェック（`/`パス, 80 番など）**（readiness 設定が不十分な場合のフォールバック）
+* 各方式は可用性／運用性に差異があるため、**詳細設計で個別検討の上、採用方式を明確化**する。
+* 原則方針：
+
+  * Pod 側の `readinessProbe` と ALB のヘルスチェックは **一致させる**（判定の不一致による不具合防止）。
+  * 複数プローブがある場合は BackendConfig で統一。
+
+---
+
+## 4. まとめ
+
+* **外部接続（Akamai側）**：ALB を継続利用、作成方式は *Gateway/Ingress 自動作成* または *手動作成＋NodePort* の2案 → 詳細設計で検討。
+* **内部通信（Vue ↔ Front Pod）**：内部 ALB か GKE Service の利用を比較検討 → 詳細設計で決定。
+* **ヘルスチェック**：readinessProbe／BackendConfig を前提に設計、詳細方式は別途要件ごとに検討。
+
+---
+
+👉 この記載を「ロードバランシング設計方針」の章に追加すれば、現行踏襲＋GKE 移行時の検討軸を整理できます。
+
+---
+
+ご希望あれば、このまま表形式（候補方式／メリット／デメリット／決定タイミング）に整形しましょうか？
