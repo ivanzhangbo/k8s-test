@@ -1,188 +1,175 @@
-はい、承知いたしました。
-GKE Autopilot プライベートクラスタにおけるDNS構成方針について、方式設計書の章を作成します。
+了解。GKE（Standard／Autopilot 共通）での**Pod監視設計**を、方式設計書にそのまま載せられる形で簡潔にまとめます。
+（Autopilot特有の注意点も併記）
 
 ---
 
-## **第X章 DNS構成方針**
+# Pod監視 設計方針（GKE移行対応）
 
-### **1. はじめに**
-本章では、GKE Autopilot プライベートクラスタ環境における名前解決（DNS）の構成方針について定義する。
+## 1. 目的・範囲
 
-本設計の目的は、クラスタ内のPodから以下のリソースに対して、セキュアかつ安定的に名前解決できる仕組みを確立することである。
-
-* クラスタ内部のサービス（Service）
-* Google Cloud Platform (GCP) の各種APIエンドポイント
-* Cloud Interconnect経由で接続されたオンプレミス環境のリソース
-
-### **2. DNS解決要件**
-本システムにおけるDNSの解決要件を以下に示す。
-
-| No. | 解決元 | 解決対象 | 解決方法 | 備考 |
-| :-- | :--- | :--- | :--- | :--- |
-| 1 | Pod | クラスタ内の他Pod / Service | `kube-dns`による解決 | `<service>.<namespace>.svc.cluster.local` |
-| 2 | Pod | GCP APIエンドポイント | プライベートアクセス経由での解決 | `*.googleapis.com` 等 |
-| 3 | Pod | オンプレミス環境のリソース | オンプレミスDNSへの転送による解決 | `*.corp.on-prem.local` 等 |
-
-### **3. 前提条件**
-* GKEクラスタは**Autopilotモード**であり、**プライベートクラスタ**として構成される。
-* クラスタが属するVPCは**Shared VPC**である。
-* GCPとオンプレミス環境は**Cloud Interconnect**で接続済みである。
-* オンプレミス環境には、自社ドメインを管理する**DNSサーバが既に存在する**。
-
-### **4. 基本設計**
-GKE標準の`kube-dns`と、GCPのマネージドDNSサービスである**Cloud DNS**を組み合わせて要件を実現する。PodからのDNSクエリは、解決対象のドメインに応じて適切なDNSへ振り分けられる。
-
-#### **4.1. 全体構成図**
-
-
-#### **4.2. 名前解決フロー**
-1.  **クラスタ内部の名前解決**:
-    Podからのクエリがクラスタ内部ドメイン (`*.cluster.local`) 宛の場合、クラスタにデフォルトで展開される`kube-dns`が解決し、対象のClusterIPを応答する。
-
-2.  **外部ドメインの名前解決**:
-    クラスタ内部ドメイン以外へのクエリは、`kube-dns`からVPCに設定されたCloud DNSのポリシーに従って処理される。
-
-3.  **オンプレミスリソースの名前解決**:
-    オンプレミスドメイン (`*.corp.on-prem.local`) 宛のクエリは、**Cloud DNSの転送ゾーン（Forwarding Zone）** の設定に基づき、Cloud Interconnectを経由してオンプレミスのDNSサーバへ転送され、解決される。
-
-4.  **GCP APIの名前解決**:
-    GCP APIエンドポイント (`*.googleapis.com`) 宛のクエリは、**Cloud DNSの限定公開ゾーン（Private Zone）** の設定に基づき、Private Google Access用の仮想IPアドレスに応答する。これにより、Podはインターネットに出ることなくGCPサービスと通信できる。
+* 対象：アプリPod（Web／Vue等）・関連Sidecar・Namespace単位での運用監視
+* 目的：異常の**早期検知**、**影響最小化**、**原因特定**の迅速化（メトリクス／ログ／イベント／トレースの統合可視化）
 
 ---
 
-### **5. 詳細設計**
-基本設計を実現するための具体的なリソース設定を以下に示す。
+## 2. 監視コンポーネント（採用方針）
 
-#### **5.1. Cloud DNS ゾーン設定**
+* **メトリクス**：Cloud Monitoring（Google Cloud Managed Service for Prometheus＝MGMP）
 
-##### **5.1.1. オンプレミスDNSへの転送ゾーン**
-オンプレミス環境のリソース名前解決のために、Cloud DNSに転送ゾーンを作成する。
-
-* **ゾーン名**: `on-prem-forwarding-zone`
-* **DNS名**: `corp.on-prem.local.` (オンプレミスのドメイン)
-* **転送先IPアドレス**: オンプレミスDNSサーバのIPアドレス (複数指定可)
-* **対象VPC**: GKEクラスタが属するShared VPC
-
-##### **5.1.2. GCP API向け限定公開ゾーン**
-Private Google Accessを利用するために、`googleapis.com`の限定公開ゾーンを作成する。
-
-* **ゾーン名**: `private-googleapis-zone`
-* **DNS名**: `googleapis.com.`
-* **対象VPC**: GKEクラスタが属するShared VPC
-* **レコード設定**:
-    * `*.googleapis.com` (Aレコード): `199.36.153.8`, `199.36.153.9`, `199.36.153.10`, `199.36.153.11`
-    * `googleapis.com` (Aレコード): 同上
-
-#### **5.2. ファイアウォールルール**
-DNSクエリの転送を許可するため、Shared VPCに以下のファイアウォールルールを構成する。
-
-* **ルール名**: `allow-dns-to-onprem`
-* **方向**: 下り（Egress）
-* **送信元**: GKEのPod IPアドレス範囲
-* **宛先**: オンプレミスDNSサーバのIPアドレス
-* **プロトコル/ポート**: `udp:53`, `tcp:53`
-* **アクション**: 許可
-
-*※戻りのトラフィックを許可する上り（Ingress）ルールも、オンプレミス側のファイアウォールおよびGCPのステートフルなファイアウォールの仕様に応じて適切に設定する。*
+  * Autopilot：**DaemonSet不要**のマネージド収集を採用
+* **ログ**：Cloud Logging（コンテナ stdout/stderr 集約、ログベース指標を作成）
+* **イベント**：Kubernetes Events（CrashLoopBackOff/OOMKilled/Preempt 等）をMonitoringへ連携
+* **トレース**（任意）：OpenTelemetry → Cloud Trace
+* **可用性**：Uptime Check（外形監視）＋LBヘルスチェック（BackendConfig/HealthCheckPolicy）と整合
 
 ---
 
-### **6. 設計理由**
-本構成方式を採用する理由は以下の通りである。
+## 3. SLI/SLO 設計
 
-* **マネージドサービスの活用**: Cloud DNSというフルマネージドサービスを利用することで、DNSサーバの構築・運用・パッチ適用といった管理コストを削減できる。
-* **統合された名前解決**: GKE内部、GCP、オンプレミスという異なる環境の名前解決をVPCのDNSポリシーで一元的に管理でき、構成がシンプルになる。
-* **プライベート接続の維持**: 限定公開ゾーンを利用することで、Podはインターネットを経由せずにGCPサービスへセキュアにアクセス可能となり、プライベートクラスタの利点を最大限に活かせる。
+* **推奨SLI**
 
-はい、承知いたしました。
-これまでの会話全体を一つの技術設計ドキュメントとしてまとめ、整理します。
+  * 可用性：`readiness` OK率（PodがServiceに参加している時間割合）
+  * 安定性：`5xx率`、`p95/p99 レイテンシ`、`再起動回数`、`CrashLoopBackOff発生率`
+  * リソース：`CPU利用率/スロットリング率`、`メモリ利用率/OOMKill`、`FS使用率`
+* **SLO例**（Web系）
 
------
+  * 可用性 99.9% / 月、エラーレート（5xx）≦0.5% / 5分移動、p99レイテンシ ≦ 800ms
+* **アラート方針**
 
-## **GKE Autopilotとオンプレミス環境のハイブリッド接続設計ガイド**
+  * 連続N分（例：5分×3回）でSLO逸脱傾向 → 通知（高/中/低の3段階）
 
-### **1. 概要**
+---
 
-本文書は、GKE Autopilot プライベートクラスタと、Cloud Interconnectで接続されたオンプレミス環境との間で、セキュアかつ信頼性の高いハイブリッド接続を実現するためのネットワークおよびDNSの設計方針を定義するものです。
+## 4. アプリ健全性（Probe とLBの整合）
 
------
+* Pod：`startupProbe`（起動猶予）、`readinessProbe`（受流判定）、`livenessProbe`（自己回復）を**分離定義**
+* LB：Ingress/ Gatewayのヘルスチェックは **readinessと一致**（BackendConfig/HealthCheckPolicyで明示）
+* 終了時：`preStop`＋`terminationGracePeriodSeconds` で**ドレイン**を保証
 
-### **2. ネットワーク接続の基本要件と注意点**
+---
 
-GKE Podからオンプレミスリソースへアクセスする際の基本的な要件と注意点は以下の通りです。
+## 5. 収集と可視化（実装）
 
-  * **IPアドレス計画**: GCPのVPCとオンプレミスネットワークのCIDR範囲が重複しないように設計します。
-  * **ルーティング**: オンプレミスからGCPへは、**デフォルトルート (`0.0.0.0/0`) を広報せず**、オンプレミス内の具体的な宛先CIDRのみをCloud Routerで広報します。
-  * **ファイアウォール**: GCPのVPCファイアウォールとオンプレミス側のファイアウォールの双方で、必要な通信（Pod IP範囲 ⇔ オンプレミスIP範囲）を許可するルールを設定します。
+### 5.1 メトリクス収集（Managed Prometheus）
 
------
-
-### **3. Pod IPの送信元制御**
-
-オンプレミス側で厳密なアクセス制御を行うためには、GKE Podの送信元IPアドレスを正しくオンプレミスへ伝える必要があります。
-
-#### **3.1. IPマスカレード（SNAT）利用時の課題**
-
-デフォルトでは、GKEノードからVPC外への通信はIPマスカレード（SNAT）され、送信元IPがPod IPから**ノードのIP**に書き換えられます。
-
-  * **課題**: オンプレミスのファイアウォールからは、どのPodからの通信か区別できず、「GKEクラスタのノード」という大きな単位でしかアクセス制御ができません。
-
-#### **3.2. Egress NATポリシー（NoSNAT）による解決**
-
-Pod単位のきめ細やかなアクセス制御を実現するため、**Egress NATポリシー**を作成し、オンプレミス宛の通信でIPマスカレードを無効化（`NoSNAT`）します。
-
-  * **効果**: PodのIPアドレスがそのままオンプレミスのファイアウォールに届くため、Pod単位での厳密なアクセス制御が可能になります。
-
-<!-- end list -->
+* **Pod側**：`/metrics` をHTTP公開（例：`:8080/metrics`）
+* **Scrape定義（PodMonitoring CRD）**：
 
 ```yaml
-apiVersion: networking.gke.io/v1
-kind: EgressNATPolicy
+apiVersion: monitoring.googleapis.com/v1
+kind: PodMonitoring
 metadata:
-  name: default
+  name: web-app
+  namespace: app-prod
 spec:
-  action: NoSNAT
-  destinations:
-  - cidr: <オンプレミスのPod IPアドレス範囲>
-  - cidr: <オンプレミスのService IPアドレス範囲>
+  selector:
+    matchLabels:
+      app: web
+  endpoints:
+  - port: http        # Service or containerPort 名
+    path: /metrics
+    interval: 30s
 ```
 
------
+* **Recording/Alert ルール**（Rule CRD）でSLO/閾値を整備（例：5xx率、p99レイテンシ）
 
-### **4. IPアドレス計画：Pod CIDRの指定**
+### 5.2 ログ収集（Cloud Logging）
 
-Autopilotクラスタが使用するPodのIPアドレス範囲は、クラスタ作成時に直接指定するのではなく、VPCサブネットに**セカンダリIPアドレス範囲**を定義することで間接的に指定します。
+* アプリログは**stdout/stderr**へ。PV直書きは廃止
+* **ログベース指標**例（5xx率）：
 
-1.  **事前準備**: `gcloud compute networks subnets update`コマンドを使い、VPCサブネットにPod用として使用したいCIDRをセカンダリ範囲として追加します。
-2.  **クラスタ作成**: `gcloud container clusters create-auto`コマンドの`--cluster-secondary-range-name`フラグで、準備したセカンダリ範囲の名前を指定してクラスタを作成します。
+  * フィルタ：`resource.type="k8s_container" severity>=ERROR httpRequest.status>=500`
+  * 指標化 → アラート（5分平均で閾値超）
 
------
+### 5.3 ダッシュボード（必須ウィジェット）
 
-### **5. DNS設計**
+* SLI要約：可用性、5xx率、p99
+* Pod安定：`container/restart_count`、CrashLoopBackOff件数、Pod未Ready数
+* リソース：CPU/メモリ使用率、`container/cpu/throttled_time`、OOMKill回数
+* 依存：DB/外部APIのレイテンシとエラー（可能ならエクスポート）
 
-GCPとオンプレミス環境の間でシームレスな名前解決を実現するため、**Cloud DNS**をハブとして利用した双方向のDNS解決アーキテクチャを構築します。
+---
 
-#### **5.1. ケース1: GCPからオンプレミスへの名前解決**
+## 6. 代表アラート（しきい値例）
 
-GKE Podがオンプレミスのホスト名（例: `server.corp.on-prem.local`）を解決できるようにします。
+* **可用性**：`NotReady Pod > 0` が 5分継続（高）
+* **再起動**：`RestartCount 増加速度 > 3/10分`（高）
+* **CrashLoop**：`CrashLoopBackOff 発生 > 0` が 5分継続（高）
+* **5xx率**：`>1%` が 10分継続（中）
+* **レイテンシ**：`p99 > 800ms` が 10分継続（中）
+* **CPUスロットリング**：`throttling_ratio > 10%` が 15分継続（中）
+* **メモリ**：`利用率 > 90%` が 10分継続、`OOMKill 発生`（高）
 
-  * **方式**: **Cloud DNS 転送ゾーン（Forwarding Zone）** を使用します。
-  * **フロー**:
-    1.  Podからのクエリは`kube-dns`を経由しCloud DNSに渡ります。
-    2.  Cloud DNSは、オンプレミスドメイン宛のクエリを転送ゾーンの設定に従い、Interconnect経由でオンプレミスのDNSサーバへ転送します。
-    3.  オンプレミスDNSが名前解決を行い、結果を返します。
-  * **構成図**:
+---
 
-#### **5.2. ケース2: オンプレミスからGCPへの名前解決**
+## 7. 事件対応（Runbook 連携）
 
-オンプレミスのクライアントがGKEのIngress（内部ALB）などのホスト名（例: `app1.gcp.corp.internal`）を解決できるようにします。
+* 各アラートに**Runbook URL**（対処手順）を紐付け
 
-  * **方式**: オンプレミスDNSの**条件付きフォワーダ**と**Cloud DNS インバウンドサーバポリシー**を組み合わせます。
-  * **フロー**:
-    1.  オンプレミスクライアントからのクエリを受け取ったオンプレミスDNSは、GCPドメイン宛のクエリをCloud DNSのインバウンドポリシー用IPアドレスへ転送します。
-    2.  Cloud DNSは、VPCに紐づく限定公開ゾーン（Private Zone）を参照し、内部ALBのIPアドレスを返します。
-  * **構成図**:
+  * 例：CrashLoop → `kubectl describe pod` / `logs -p` / config差分確認 / rollout undo 手順
+  * 例：5xx上昇 → LB健全性／readiness／依存先疎通／直近リリース有無を確認
 
-### **6. 総括**
+---
 
-本設計ガイドで示したネットワークとDNSの構成を統合的に適用することで、GKE Autopilotの運用性を損なうことなく、オンプレミス環境と連携したセキュアで管理性の高いハイブリッドクラウド環境を構築することが可能となります。
+## 8. Autopilot特記事項
+
+* **DaemonSet禁止**：独自エージェントは基本不可 → **Managed Prometheus/Cloud Logging** を使用
+* **ノード面の監視**はGKE管理下。ワークロード側はPod/Namespace指標に集中
+* **HPA**：CPU/カスタムメトリクスでの自動スケールと**アラート**を組み合わせ（スケール失敗も監視）
+
+---
+
+## 9. 最低限の設定テンプレート（抜粋）
+
+### 9.1 Probe（コンテナ）
+
+```yaml
+startupProbe:
+  httpGet: { path: /healthz, port: 8080 }
+  periodSeconds: 5
+  failureThreshold: 60   # 5分猶予
+readinessProbe:
+  httpGet: { path: /healthz, port: 8080 }
+  periodSeconds: 5
+  timeoutSeconds: 2
+  failureThreshold: 3
+livenessProbe:
+  httpGet: { path: /livez, port: 8080 }
+  periodSeconds: 10
+  timeoutSeconds: 2
+  failureThreshold: 3
+```
+
+### 9.2 BackendConfig（Ingress利用時のLBヘルスチェック）
+
+```yaml
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata: { name: web-hc, namespace: app-prod }
+spec:
+  healthCheck:
+    type: HTTP
+    requestPath: /healthz
+    port: 8080
+    checkIntervalSec: 5
+    timeoutSec: 4
+    healthyThreshold: 2
+    unhealthyThreshold: 2
+```
+
+---
+
+## 10. 運用ルール
+
+* **変更時**は Probe／LBヘルスチェック／HPA閾値の**三者整合**をレビュー必須
+* **計測設計**は開発フェーズから（/metrics 実装・ログ構造化）
+* **ダッシュボード**と**アラート**はPRD前に完成・演習（GameDay）を実施
+
+---
+
+必要なら、あなたの現行マニフェストを基に
+
+* `PodMonitoring/Rule`（Managed Prometheus）
+* ログベース指標とアラートポリシー
+* ダッシュボードJSON（Cloud Monitoring）
+  を**実体ファイル**で作成します。
