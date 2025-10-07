@@ -1,6 +1,6 @@
-了解。GKE（Standard／Autopilot 共通）での**Pod監視設計**を、方式設計書にそのまま載せられる形で簡潔にまとめます。
+[了解。GKE（Standard／Autopilot 共通）での**Pod監視設計**を、方式設計書にそのまま載せられる形で簡潔にまとめます。
 （Autopilot特有の注意点も併記）
-
+](https://cloud.google.com/kubernetes-engine/docs/how-to/multi-pod-cidr?hl=ja)
 ---
 
 # Pod監視 設計方針（GKE移行対応）
