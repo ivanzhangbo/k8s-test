@@ -3,6 +3,9 @@
 ](https://cloud.google.com/kubernetes-engine/docs/how-to/multi-pod-cidr?hl=ja)
 ---
 
+https://cloud.google.com/kubernetes-engine/docs/how-to/kube-dns
+https://cloud.google.com/kubernetes-engine/docs/concepts/service-discovery
+
 # Pod監視 設計方針（GKE移行対応）
 
 ## 1. 目的・範囲
