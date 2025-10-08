@@ -1,10 +1,4 @@
-[了解。GKE（Standard／Autopilot 共通）での**Pod監視設計**を、方式設計書にそのまま載せられる形で簡潔にまとめます。
-（Autopilot特有の注意点も併記）
-](https://cloud.google.com/kubernetes-engine/docs/how-to/multi-pod-cidr?hl=ja)
----
-
-https://cloud.google.com/kubernetes-engine/docs/how-to/kube-dns
-https://cloud.google.com/kubernetes-engine/docs/concepts/service-discovery
+https://cloud.google.com/kubernetes-engine/docs/how-to/alias-ips?hl=ja#create_a_cluster_and_select_the_control_plane_ip_address_range
 
 # Pod監視 設計方針（GKE移行対応）
 
