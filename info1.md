@@ -1,172 +1,107 @@
-[https://cloud.google.com/kubernetes-engine/docs/how-to/alias-ips?hl=ja#create_a_cluster_and_select_the_control_plane_ip_address_range
-](https://cloud.google.com/sdk/gcloud/reference/container/clusters/create#--master-ipv4-cidr)
-# Pod監視 設計方針（GKE移行対応）
-
-## 1. 目的・範囲
-
-* 対象：アプリPod（Web／Vue等）・関連Sidecar・Namespace単位での運用監視
-* 目的：異常の**早期検知**、**影響最小化**、**原因特定**の迅速化（メトリクス／ログ／イベント／トレースの統合可視化）
+画像の内容から判断すると、これは**オペレーション実施時の心得・安全ルール**に対して、
+「守れない場合どのような影響があるか」を記入する欄ですね。
+以下に、それぞれのルールに対応する「守れなかった場合の影響例」を日本語で具体的に整理しました。
+そのままExcelへ転記できる形式にしています。
 
 ---
 
-## 2. 監視コンポーネント（採用方針）
+### 🔹1. オペレーションは設計と事前準備に頭とエネルギーを使い、当日は悩まずスムーズに実行する
 
-* **メトリクス**：Cloud Monitoring（Google Cloud Managed Service for Prometheus＝MGMP）
-
-  * Autopilot：**DaemonSet不要**のマネージド収集を採用
-* **ログ**：Cloud Logging（コンテナ stdout/stderr 集約、ログベース指標を作成）
-* **イベント**：Kubernetes Events（CrashLoopBackOff/OOMKilled/Preempt 等）をMonitoringへ連携
-* **トレース**（任意）：OpenTelemetry → Cloud Trace
-* **可用性**：Uptime Check（外形監視）＋LBヘルスチェック（BackendConfig/HealthCheckPolicy）と整合
+**守れない場合の影響：**
+準備不足により当日トラブル対応に追われ、予定通り進行できず、ミスやシステム障害を誘発する。
 
 ---
 
-## 3. SLI/SLO 設計
+### 🔹2. 傍らに時計を携え、自らのオペレーションスピードを把握する
 
-* **推奨SLI**
-
-  * 可用性：`readiness` OK率（PodがServiceに参加している時間割合）
-  * 安定性：`5xx率`、`p95/p99 レイテンシ`、`再起動回数`、`CrashLoopBackOff発生率`
-  * リソース：`CPU利用率/スロットリング率`、`メモリ利用率/OOMKill`、`FS使用率`
-* **SLO例**（Web系）
-
-  * 可用性 99.9% / 月、エラーレート（5xx）≦0.5% / 5分移動、p99レイテンシ ≦ 800ms
-* **アラート方針**
-
-  * 連続N分（例：5分×3回）でSLO逸脱傾向 → 通知（高/中/低の3段階）
+**守れない場合の影響：**
+時間感覚を失い、作業が遅延または焦りによる誤操作を引き起こす可能性がある。
 
 ---
 
-## 4. アプリ健全性（Probe とLBの整合）
+### 🔹3. オペレーションを行う際は、必ず手順書に沿って実施する
 
-* Pod：`startupProbe`（起動猶予）、`readinessProbe`（受流判定）、`livenessProbe`（自己回復）を**分離定義**
-* LB：Ingress/ Gatewayのヘルスチェックは **readinessと一致**（BackendConfig/HealthCheckPolicyで明示）
-* 終了時：`preStop`＋`terminationGracePeriodSeconds` で**ドレイン**を保証
-
----
-
-## 5. 収集と可視化（実装）
-
-### 5.1 メトリクス収集（Managed Prometheus）
-
-* **Pod側**：`/metrics` をHTTP公開（例：`:8080/metrics`）
-* **Scrape定義（PodMonitoring CRD）**：
-
-```yaml
-apiVersion: monitoring.googleapis.com/v1
-kind: PodMonitoring
-metadata:
-  name: web-app
-  namespace: app-prod
-spec:
-  selector:
-    matchLabels:
-      app: web
-  endpoints:
-  - port: http        # Service or containerPort 名
-    path: /metrics
-    interval: 30s
-```
-
-* **Recording/Alert ルール**（Rule CRD）でSLO/閾値を整備（例：5xx率、p99レイテンシ）
-
-### 5.2 ログ収集（Cloud Logging）
-
-* アプリログは**stdout/stderr**へ。PV直書きは廃止
-* **ログベース指標**例（5xx率）：
-
-  * フィルタ：`resource.type="k8s_container" severity>=ERROR httpRequest.status>=500`
-  * 指標化 → アラート（5分平均で閾値超）
-
-### 5.3 ダッシュボード（必須ウィジェット）
-
-* SLI要約：可用性、5xx率、p99
-* Pod安定：`container/restart_count`、CrashLoopBackOff件数、Pod未Ready数
-* リソース：CPU/メモリ使用率、`container/cpu/throttled_time`、OOMKill回数
-* 依存：DB/外部APIのレイテンシとエラー（可能ならエクスポート）
+**守れない場合の影響：**
+手順逸脱により設定ミス・構成不整合・サービス停止など重大インシデントを招く。
 
 ---
 
-## 6. 代表アラート（しきい値例）
+### 🔹4. 手順書に記載の無い、または手順そのものが無い場合は、原則実施しない
 
-* **可用性**：`NotReady Pod > 0` が 5分継続（高）
-* **再起動**：`RestartCount 増加速度 > 3/10分`（高）
-* **CrashLoop**：`CrashLoopBackOff 発生 > 0` が 5分継続（高）
-* **5xx率**：`>1%` が 10分継続（中）
-* **レイテンシ**：`p99 > 800ms` が 10分継続（中）
-* **CPUスロットリング**：`throttling_ratio > 10%` が 15分継続（中）
-* **メモリ**：`利用率 > 90%` が 10分継続、`OOMKill 発生`（高）
+**守れない場合の影響：**
+根拠のない操作で予期せぬ副作用が発生し、障害発生や責任追及を受ける。
 
 ---
 
-## 7. 事件対応（Runbook 連携）
+### 🔹5. 手順に無いが実施すべき事項に気づいたときは、エスカレーション判断をあおぐ
 
-* 各アラートに**Runbook URL**（対処手順）を紐付け
-
-  * 例：CrashLoop → `kubectl describe pod` / `logs -p` / config差分確認 / rollout undo 手順
-  * 例：5xx上昇 → LB健全性／readiness／依存先疎通／直近リリース有無を確認
+**守れない場合の影響：**
+独断対応により、他チームや上位層に共有されないままリスクを拡大させる。
 
 ---
 
-## 8. Autopilot特記事項
+### 🔹6. 気づいているのにエスカレーションも無く手順化しないのは、誰も幸せにならないと理解する
 
-* **DaemonSet禁止**：独自エージェントは基本不可 → **Managed Prometheus/Cloud Logging** を使用
-* **ノード面の監視**はGKE管理下。ワークロード側はPod/Namespace指標に集中
-* **HPA**：CPU/カスタムメトリクスでの自動スケールと**アラート**を組み合わせ（スケール失敗も監視）
-
----
-
-## 9. 最低限の設定テンプレート（抜粋）
-
-### 9.1 Probe（コンテナ）
-
-```yaml
-startupProbe:
-  httpGet: { path: /healthz, port: 8080 }
-  periodSeconds: 5
-  failureThreshold: 60   # 5分猶予
-readinessProbe:
-  httpGet: { path: /healthz, port: 8080 }
-  periodSeconds: 5
-  timeoutSeconds: 2
-  failureThreshold: 3
-livenessProbe:
-  httpGet: { path: /livez, port: 8080 }
-  periodSeconds: 10
-  timeoutSeconds: 2
-  failureThreshold: 3
-```
-
-### 9.2 BackendConfig（Ingress利用時のLBヘルスチェック）
-
-```yaml
-apiVersion: cloud.google.com/v1
-kind: BackendConfig
-metadata: { name: web-hc, namespace: app-prod }
-spec:
-  healthCheck:
-    type: HTTP
-    requestPath: /healthz
-    port: 8080
-    checkIntervalSec: 5
-    timeoutSec: 4
-    healthyThreshold: 2
-    unhealthyThreshold: 2
-```
+**守れない場合の影響：**
+同じ問題が再発し、組織全体の品質低下・属人化を助長する。
 
 ---
 
-## 10. 運用ルール
+### 🔹7. 1つのオペレーションに集中する。複数のオペレーションを並列化しない
 
-* **変更時**は Probe／LBヘルスチェック／HPA閾値の**三者整合**をレビュー必須
-* **計測設計**は開発フェーズから（/metrics 実装・ログ構造化）
-* **ダッシュボード**と**アラート**はPRD前に完成・演習（GameDay）を実施
+**守れない場合の影響：**
+注意が分散し、人的ミスや誤操作によるシステム障害のリスクが高まる。
 
 ---
 
-必要なら、あなたの現行マニフェストを基に
+### 🔹8. 人はミスをする。自分自身の操作を過信しない。オペレーションの結果は必ずダブルチェックを行う
 
-* `PodMonitoring/Rule`（Managed Prometheus）
-* ログベース指標とアラートポリシー
-* ダッシュボードJSON（Cloud Monitoring）
-  を**実体ファイル**で作成します。
+**守れない場合の影響：**
+確認漏れにより誤設定が検知されず、本番障害・サービス停止につながる。
+
+---
+
+### 🔹9. オペレーションが正しく実施できたかどうかを現物確認する
+
+**守れない場合の影響：**
+実施結果の誤認により、未反映や設定不備を見逃し、後続処理に影響する。
+
+---
+
+### 🔹10. ヒヤリ・ハットの意識が大切。気づきがあれば手順に即反映し、違和感があれば必ず確認する
+
+**守れない場合の影響：**
+同様のミスが再発し、重大障害に発展するリスクを放置することになる。
+
+---
+
+### 🔹11. そのオペレーションの目的・結果が何に使われるか、影響範囲を意識し用意周到に準備する
+
+**守れない場合の影響：**
+影響分析不足により、関連システムへの波及障害やビジネス影響が発生する。
+
+---
+
+### 🔹12. そのオペレーションは自動化できないのかという視点を常に持ち、仕組み化を考える
+
+**守れない場合の影響：**
+属人化・作業負荷増大を招き、将来の運用効率が低下する。
+
+---
+
+### 🔹13. そのオペレーションの最後の砦はあなた。プロとして自信を持って実行できるかを振り返る
+
+**守れない場合の影響：**
+責任感の欠如により確認精度が下がり、信頼性・品質が損なわれる。
+
+---
+
+### 🔹14. 障害発生時は調査のオペレーションがイレギュラー手順であることを理解する
+
+**守れない場合の影響：**
+平常時と同様の手順で対応し、障害要因の特定が遅れ、復旧が長期化する。
+
+---
+
+これをもとに「守れない場合の影響」をExcelに追記すれば、教育・安全管理資料として十分完成度の高い内容になります。
+希望があれば、これを**表形式（Excel貼り付け用）**に整形して出力することもできます。作りますか？
