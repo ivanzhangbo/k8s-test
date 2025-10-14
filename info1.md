@@ -1,107 +1,94 @@
-画像の内容から判断すると、これは**オペレーション実施時の心得・安全ルール**に対して、
-「守れない場合どのような影響があるか」を記入する欄ですね。
-以下に、それぞれのルールに対応する「守れなかった場合の影響例」を日本語で具体的に整理しました。
-そのままExcelへ転記できる形式にしています。
+terraform {
+  required_version = ">= 1.0"
 
----
+  required_providers {
+    google = {
+      source  = "hashicorp/google"
+      version = ">= 4.0"
+    }
+  }
+}
 
-### 🔹1. オペレーションは設計と事前準備に頭とエネルギーを使い、当日は悩まずスムーズに実行する
+variable "project_id" {
+  description = "The ID of the Google Cloud project."
+  type        = string
+}
 
-**守れない場合の影響：**
-準備不足により当日トラブル対応に追われ、予定通り進行できず、ミスやシステム障害を誘発する。
+variable "region" {
+  description = "The region for the resources."
+  type        = string
+}
 
----
+data "google_project" "project" {}
 
-### 🔹2. 傍らに時計を携え、自らのオペレーションスピードを把握する
+resource "google_service_account" "gke_sa" {
+  project      = var.project_id
+  account_id   = "gke-sa"
+  display_name = "GKE Service Account"
+}
 
-**守れない場合の影響：**
-時間感覚を失い、作業が遅延または焦りによる誤操作を引き起こす可能性がある。
+resource "google_project_iam_member" "kms_encrypter_decrypter" {
+  project = var.project_id
+  role    = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
+  member  = "serviceAccount:${google_service_account.gke_sa.email}"
+}
 
----
+resource "google_project_iam_member" "container_node_service_account" {
+  project = var.project_id
+  role    = "roles/container.nodeServiceAccount" # Corrected from roles/container.defaultNodeServiceAccount
+  member  = "serviceAccount:${google_service_account.gke_sa.email}"
+}
 
-### 🔹3. オペレーションを行う際は、必ず手順書に沿って実施する
+resource "google_kms_key_ring" "gke_keyring" {
+  project  = var.project_id
+  name     = "gke-keyring"
+  location = var.region
+}
 
-**守れない場合の影響：**
-手順逸脱により設定ミス・構成不整合・サービス停止など重大インシデントを招く。
+resource "google_kms_crypto_key" "gke_boot_key" {
+  name      = "gke-boot-key"
+  key_ring  = google_kms_key_ring.gke_keyring.id
+  purpose   = "ENCRYPT_DECRYPT"
+}
 
----
+resource "google_kms_crypto_key_iam_member" "gke_boot_key_iam" {
+  crypto_key_id = google_kms_crypto_key.gke_boot_key.id
+  role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
+  member        = "serviceAccount:service-${data.google_project.project.number}@compute-system.iam.gserviceaccount.com"
+}
 
-### 🔹4. 手順書に記載の無い、または手順そのものが無い場合は、原則実施しない
+resource "google_project_iam_member" "monitoring_writer" {
+  project = var.project_id
+  role    = "roles/monitoring.metricWriter"
+  member  = "serviceAccount:${google_service_account.gke_sa.email}"
+}
 
-**守れない場合の影響：**
-根拠のない操作で予期せぬ副作用が発生し、障害発生や責任追及を受ける。
+resource "google_project_iam_member" "artifactregistry_writer" {
+  project = var.project_id
+  role    = "roles/artifactregistry.writer"
+  member  = "serviceAccount:${google_service_account.gke_sa.email}"
+}
 
----
+resource "google_project_iam_member" "artifactregistry_reader" {
+  project = var.project_id
+  role    = "roles/artifactregistry.reader"
+  member  = "serviceAccount:${google_service_account.gke_sa.email}"
+}
 
-### 🔹5. 手順に無いが実施すべき事項に気づいたときは、エスカレーション判断をあおぐ
 
-**守れない場合の影響：**
-独断対応により、他チームや上位層に共有されないままリスクを拡大させる。
 
----
 
-### 🔹6. 気づいているのにエスカレーションも無く手順化しないのは、誰も幸せにならないと理解する
 
-**守れない場合の影響：**
-同じ問題が再発し、組織全体の品質低下・属人化を助長する。
 
----
 
-### 🔹7. 1つのオペレーションに集中する。複数のオペレーションを並列化しない
 
-**守れない場合の影響：**
-注意が分散し、人的ミスや誤操作によるシステム障害のリスクが高まる。
 
----
 
-### 🔹8. 人はミスをする。自分自身の操作を過信しない。オペレーションの結果は必ずダブルチェックを行う
 
-**守れない場合の影響：**
-確認漏れにより誤設定が検知されず、本番障害・サービス停止につながる。
 
----
 
-### 🔹9. オペレーションが正しく実施できたかどうかを現物確認する
 
-**守れない場合の影響：**
-実施結果の誤認により、未反映や設定不備を見逃し、後続処理に影響する。
 
----
 
-### 🔹10. ヒヤリ・ハットの意識が大切。気づきがあれば手順に即反映し、違和感があれば必ず確認する
-
-**守れない場合の影響：**
-同様のミスが再発し、重大障害に発展するリスクを放置することになる。
-
----
-
-### 🔹11. そのオペレーションの目的・結果が何に使われるか、影響範囲を意識し用意周到に準備する
-
-**守れない場合の影響：**
-影響分析不足により、関連システムへの波及障害やビジネス影響が発生する。
-
----
-
-### 🔹12. そのオペレーションは自動化できないのかという視点を常に持ち、仕組み化を考える
-
-**守れない場合の影響：**
-属人化・作業負荷増大を招き、将来の運用効率が低下する。
-
----
-
-### 🔹13. そのオペレーションの最後の砦はあなた。プロとして自信を持って実行できるかを振り返る
-
-**守れない場合の影響：**
-責任感の欠如により確認精度が下がり、信頼性・品質が損なわれる。
-
----
-
-### 🔹14. 障害発生時は調査のオペレーションがイレギュラー手順であることを理解する
-
-**守れない場合の影響：**
-平常時と同様の手順で対応し、障害要因の特定が遅れ、復旧が長期化する。
-
----
-
-これをもとに「守れない場合の影響」をExcelに追記すれば、教育・安全管理資料として十分完成度の高い内容になります。
-希望があれば、これを**表形式（Excel貼り付け用）**に整形して出力することもできます。作りますか？
+project_id     = "your-gcp-project-id"
+region         = "your-gcp-region"
