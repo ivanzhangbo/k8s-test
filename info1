@@ -1,1 +1,58 @@
-https://chatgpt.com/s/dr_68f17e52bb5c819194bc380287f2fd77
+承知しました。以下に、**Podシステムの視点**から整理した「ネットワーク構成章」のMarkdownフォーマットをご提供します。クラスタ全体よりも、Pod自身の通信・配置・連携・外部接続の観点にフォーカスしています。
+
+---
+
+# ネットワーク構成（Podシステム視点）
+
+## 1. 外部公開の設計（PodとALBの関係）
+
+* WebシステムのPodは、**外部ALB（Application Load Balancer）**と連携し、外部ユーザからのHTTP/HTTPSリクエストを受け付ける。
+* ALBのバックエンドには**NEG（Network Endpoint Group）**を使用し、Pod（エンドポイント）へ直接トラフィックを分散。
+* Kubernetes IngressやGateway APIは未使用。インフラ構成で**スタンドアロンのNEGを構築**。
+* Podの`readinessProbe`によりALBからのヘルスチェックに対応する設計を推奨。
+* ALBからのトラフィックは、Podの所属するServiceやPortへ直接ルーティング。
+
+## 2. Pod間通信・サービス内連携
+
+* Pod間通信は、同一クラスタ内の**Kubernetes Service**を経由して行う（ClusterIPベース）。
+* PodはVPCネイティブなIPアドレスを持ち、L3通信が可能。
+* アプリケーション間の分離単位（例：namespace, label）を明確に定義し、Serviceで名前解決できるよう構成。
+* 内部システム間でALBは利用せず、KubernetesのDNS＋Serviceで解決。
+
+## 3. Podとオンプレミスシステムの連携
+
+* Podからオンプレミス環境への通信は、**Dedicated Interconnect経由**でルーティングされる。
+* Pod IPレンジがCloud Routerからオンプレに広報され、通信経路が確保されている。
+* オンプレミスからPodへの到達も可能だが、ファイアウォール制御とDNS整備が必要。
+
+## 4. Podからの名前解決（DNS）
+
+* Pod内部では `kube-dns` または `CoreDNS` によって内部名解決が提供される。
+* オンプレミス向けのドメインは、Cloud DNSの**転送ゾーン（forwarding zone）**によりPodから参照可能。
+* GCP内のPrivate Zone名（例：*.internal.example.com）もPodから解決可能。
+* 名前解決の安定性を考慮し、必要に応じてNodeLocal DNS Cacheの導入を検討。
+
+## 5. セキュリティと通信制御
+
+* Pod単位で通信制御を行うため、**NetworkPolicy**を活用：
+
+  * 通信元・宛先のラベルやNamespaceで制限。
+  * Egress制御により、Podからの外部送信も必要なドメイン/サービスに限定。
+* GCPのVPC Firewallに加えて、アプリケーション層の通信も明示的に制御。
+* ALB経由の外部公開は `loadBalancerSourceRanges` 等でアクセス元IP制限を実施。
+
+## 6. トラブルシューティングと可観測性
+
+* Pod単位での通信経路確認に `kubectl exec` での疎通確認や `netstat` / `curl` を活用。
+* 通信不可時の調査フロー：
+
+  1. NetworkPolicyのマッチ状況確認
+  2. Service/Endpointの状態確認
+  3. DNS解決状況確認
+* 通信トレースには `gcloud packet-mirroring` や VPC Flow Logs を併用可能。
+
+---
+
+この構成は、**Pod単位でのネットワーク設計／運用の見通し**を立てやすくする意図で記載しています。GKEのクラスタ設計の補足資料として併用も可能です。
+
+ご希望があれば、この章を設計書の特定セクションに合わせてカスタマイズできます。
