@@ -1,7 +1,8 @@
-もし間違った担当者に問い合わせてしまった場合はご容赦ください。
+[もし間違った担当者に問い合わせてしまった場合はご容赦ください。
 現在、Aシステム（Pod）がローカルデータセンターで機密情報（ユーザーパスワード）をどのように扱っているのか確認したいです。
 しかし、現在のYAMLを確認したところ、参照対象のSecret名を定義している処理しか見当たらず、Secret自体の定義がありませんでした。
 
 そのため、SecretがKubernetesに保存されているのか、または外部のSecret管理（例：HashiCorp Vault）を使用しているのか分かりません。
 もし開発側で把握しているようでしたら、SecretはKubernetes標準のSecretを使用しているのか、
 それとも外部のVaultを使用しているのか教えていただけますでしょうか。
+](https://cloud.google.com/blog/products/networking/cloud-load-balancing-gets-cross-project-service-referencing)
