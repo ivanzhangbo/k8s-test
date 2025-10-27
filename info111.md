@@ -1,8 +1,16 @@
-[もし間違った担当者に問い合わせてしまった場合はご容赦ください。
-現在、Aシステム（Pod）がローカルデータセンターで機密情報（ユーザーパスワード）をどのように扱っているのか確認したいです。
-しかし、現在のYAMLを確認したところ、参照対象のSecret名を定義している処理しか見当たらず、Secret自体の定義がありませんでした。
+現在 VUE および Front の POD に設定されている liveness/readiness Probe の動作について確認したく存じます。
 
-そのため、SecretがKubernetesに保存されているのか、または外部のSecret管理（例：HashiCorp Vault）を使用しているのか分かりません。
-もし開発側で把握しているようでしたら、SecretはKubernetes標準のSecretを使用しているのか、
-それとも外部のVaultを使用しているのか教えていただけますでしょうか。
-](https://cloud.google.com/blog/products/networking/cloud-load-balancing-gets-cross-project-service-referencing)
+現行設定は以下の通りです。
+
+VUE
+Path: /hc
+Port: 3000
+
+Front
+Path: /health/html
+Port: 8080
+
+今回 GCP への移行に伴い、もし現状の Probe の確認ロジックがコード側でバックエンドのデータベースサーバの生死判定を行い、データベースに問題がない場合のみ 200 を返す仕様である場合、データベースが異常でも VUE/Front が 200 を返すようコードや通信方式の調整が必要になります。
+
+つきましては確認させてください。
+VUE/Front の liveness/readiness Probe のロジックにおいて、バックエンドデータベースサーバへの健康チェックは実装されていますでしょうか。
