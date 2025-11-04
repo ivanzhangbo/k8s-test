@@ -1,5 +1,14 @@
-以下はご依頼文の日本語訳です。
-
----
-
-ローカル環境では namespace によって各サーバーを分割していますが、GCP では各サーバーが同一の namespace に属しています。ローカル環境では各 namespace に対して ResourceQuota を設定しています。GCP 環境における namespace の ResourceQuota は、暫定的にローカル環境の ResourceQuota の合計値とし、新たな性能テストの結果に基づき再度調整を行います。
+通信元拠点名,通信元システム名,通信元ＩＰアドレス,通信先システム名,通信先ＩＰアドレス,通信先プロトコル,通信先ポート番号
+Internet,ユーザー (Akamai),Any,外部ALB,外部ALB Subnet (xxx.xxx.xxx.xxx),TCP,443
+Google Cloud,外部ALB,外部ALB Subnet (xxx.xxx.xxx.xxx),Webサーバ (GKE Service),Service Range (xxx.xxx.xxx.xxx),TCP,30000
+Google Cloud,内部ALB,内部ALB Subnet (xxx.xxx.xxx.xxx),VUEサーバ (GKE Service),Service Range (xxx.xxx.xxx.xxx),TCP,30130
+Google Cloud,Front用ALB,Front用ALB Subnet (xxx.xxx.xxx.xxx),Frontサーバ (GKE Service),Service Range (xxx.xxx.xxx.xxx),TCP,30110
+Google Cloud (GKE),Webサーバ (Pod),Pod Range (xxx.xxx.xxx.xxx),VUEサーバ (GKE Service),Service Range (xxx.xxx.xxx.xxx),TCP,30130
+Google Cloud (GKE),VUEサーバ (Pod),Pod Range (xxx.xxx.xxx.xxx),Frontサーバ (GKE Service),Service Range (xxx.xxx.xxx.xxx),TCP,30110
+Google Cloud (GKE),Frontサーバ (Pod),Pod Range (xxx.xxx.xxx.xxx),Memory Store,Memory Store Subnet (xxx.xxx.xxx.xxx),TCP,6379
+Google Cloud (GKE),Frontサーバ (Pod),Pod Range (xxx.xxx.xxx.xxx),Kube-DNS,Service Range (xxx.xxx.xxx.xxx),TCP/UDP,53
+Google Cloud (GKE),Frontサーバ (Pod),Pod Range (xxx.xxx.xxx.xxx),Cloud DNS,35.199.192.0/19,TCP/UDP,53
+Google Cloud (GKE),Frontサーバ (Pod),Pod Range (xxx.xxx.xxx.xxx),Vaultサーバ,データセンターIP,TCP,8180
+Google Cloud (GKE),Frontサーバ (Pod),Pod Range (xxx.xxx.xxx.xxx),BigIP (カード申し込みサーバ),データセンターIP,TCP,30120
+Google Cloud (GKE),Frontサーバ (Pod),Pod Range (xxx.xxx.xxx.xxx),DNSサーバ (Data Center),データセンターIP,TCP/UDP,53
+Google Cloud (GKE),Frontサーバ (Pod),Pod Range (xxx.xxx.xxx.xxx),Teamsiteサーバ,データセンターIP,TCP,8080
