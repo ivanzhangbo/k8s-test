@@ -1,0 +1,13 @@
+sed -i 's/^ *ProxyPass/# ProxyPass/' /etc/httpd/conf/httpd.conf
+sed -i 's/^ *ProxyPassReverse/# ProxyPassReverse/' /etc/httpd/conf/httpd.conf
+
+
+
+TARGET_LINE='ErrorDocument 404 /maintenance/maintenance.html'
+CONF_FILE='/etc/httpd/conf/httpd.conf'
+# 存在チェックして無ければ追加
+grep -qF "$TARGET_LINE" "$CONF_FILE" || echo "$TARGET_LINE" >> "$CONF_FILE"
+
+
+有効行（未コメント）をコメントアウトしたい場合：
+sed -i 's|^\(\s*ErrorDocument 404 /maintenance/maintenance.html\)|# \1|' $CONF_FILE
