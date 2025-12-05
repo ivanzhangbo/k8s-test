@@ -1,20 +1,9 @@
 apiVersion: v1
-kind: Service
+kind: ServiceAccount
 metadata:
-  name: my-nginx-service
-  # 
-  # ここで明示的に指定します
-  #
-  namespace: my-app-namespace 
-  annotations:
-    cloud.google.com/neg: '{"exposed_ports": {"443":{}}}'
-spec:
-  type: ClusterIP
-  selector:
-    app: my-nginx
-  ports:
-  - name: https
-    port: 443
-    targetPort: 443
-    protocol: TCP
+  name: my-ksa
+# Secretを作成しておき、ここで指定すると、
+# このSAを使うすべてのPodで自動的にこの認証情報が使われます
+imagePullSecrets:
+  - name: my-docker-registry-secret
 
