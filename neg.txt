@@ -8,41 +8,15 @@ imagePullSecrets:
   - name: my-docker-registry-secret
 
 ---
-# 2. PersistentVolume (PV) の作成
-# ここに実際のFilestore接続情報を記述します
 apiVersion: v1
-kind: PersistentVolume
+kind: Service
 metadata:
-  name: filestore-pv
+  name: backend-service # ★重要: この名前がDNS名になります
 spec:
-  capacity:
-    storage: 1Ti  # 実際のFilestoreの容量に合わせる
-  accessModes:
-    - ReadWriteMany
-  persistentVolumeReclaimPolicy: Retain # PVC削除後もPVとFilestoreを残す設定
-  storageClassName: "" # 静的プロビジョニングのため空文字にするのが重要
-  csi:
-    driver: filestore.csi.storage.gke.io
-    # volumeHandleは一意な文字列であれば何でも良いですが、管理しやすい形式推奨
-    # 形式: modeInstance/[REGION]/[INSTANCE_NAME]/[SHARE_NAME]
-    volumeHandle: "modeInstance/asia-northeast1-a/my-filestore/vol1"
-    volumeAttributes:
-      ip: 10.123.45.67  # ★ここをFilestoreのIPアドレスに書き換えてください
-      network: default  # FilestoreがあるVPCネットワーク名
-
----
-# 3. PersistentVolumeClaim (PVC) の作成
-# 作成したPVを指名してバインドします
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: filestore-pvc
-  namespace: filestore-ns
-spec:
-  accessModes:
-    - ReadWriteMany
-  storageClassName: "" # PV側と一致させる（空文字）
-  volumeName: filestore-pv # ★ここで特定のPVを明示的に指定します
-  resources:
-    requests:
-      storage: 1Ti
+  type: ClusterIP       # ★ここがNodePortではなくClusterIPになります（省略可）
+  selector:
+    app: backend-app    # このラベルを持つPodに転送する
+  ports:
+    - protocol: TCP
+      port: 80          # Serviceが待ち受けるポート (アクセス元はここを指定)
+      targetPort: 8080  # 実際のコンテナが動いているポート
