@@ -1,0 +1,42 @@
+■CA証明書
+openssl genrsa -out ca.key 4096
+
+openssl req -x509 -new -nodes -key ca.key -sha256 -days 3650 \
+  -out ca.crt \
+  -subj "/C=JP/ST=Tokyo/O=Mizuho Bank, Ltd./OU=IT Department/CN=My TFE Private CA" \
+  -extensions v3_ca \
+  -config <(printf "[req]\ndistinguished_name=dn\n[dn]\n[v3_ca]\nbasicConstraints=critical,CA:TRUE\nkeyUsage=keyCertSign,cRLSign")
+
+■サーバ証明書
+openssl genrsa -out server.key 2048
+
+openssl req -new -key server.key \
+  -subj "/C=JP/ST=Tokyo/O=Mizuho Bank, Ltd./OU=IT Department/CN=${TFE_HOSTNAME}" \
+  -config <(printf "\
+[req]\n\
+distinguished_name = req_distinguished_name\n\
+req_extensions = SAN\n\
+prompt = no\n\
+\n\
+[req_distinguished_name]\n\
+\n\
+[SAN]\n\
+subjectAltName=DNS:${TFE_HOSTNAME},IP:10.0.3.219,IP:13.112.22.181,IP:127.0.0.1\
+") \
+  -reqexts SAN \
+  -out server.csr
+
+  
+openssl x509 -req -in server.csr \
+  -CA ca.crt -CAkey ca.key -CAcreateserial \
+  -out server.crt -days 3650 -sha256 \
+  -extfile <(printf "subjectAltName=DNS:${TFE_HOSTNAME},IP:10.0.3.219,IP:13.112.22.181,IP:127.0.0.1")
+
+■TFE用証明書生成
+cp server.key key.pem
+cat server.crt > cert.pem
+cat ca.crt > bundle.pem
+
+■TFE　CLIサーバ証明書認証
+ca.crt を/etc/pki/ca-trust/source/anchors/にコピー
+sudo update-ca-trust
