@@ -20,3 +20,6 @@ spec:
     - protocol: TCP
       port: 80          # Serviceが待ち受けるポート (アクセス元はここを指定)
       targetPort: 8080  # 実際のコンテナが動いているポート
+spec:
+      # ★ここで作成した ServiceAccount を指定します
+      serviceAccountName: my-custom-sa
