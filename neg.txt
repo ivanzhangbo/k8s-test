@@ -1,3 +1,7 @@
+echo 'source <(kubectl completion bash)' >>~/.bashrc
+source ~/.bashrc
+
+
 apiVersion: v1
 kind: ServiceAccount
 metadata:
