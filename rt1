@@ -1,0 +1,24 @@
+FROM alpine:3.20
+
+RUN apk add --no-cache \
+    openssh \
+    bash \
+    coreutils
+
+RUN mkdir -p /var/run/sshd
+
+RUN echo "root:rootpass" | chpasswd
+
+RUN sed -i 's/#PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config \
+ && sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
+
+RUN ssh-keygen -A
+
+RUN mkdir -p /data && echo "hello from container" > /data/test.txt
+
+EXPOSE 22
+
+CMD ["/usr/sbin/sshd", "-D", "-e"]
+
+kubectl port-forward pod/scp-test-6499748769-zq9wz 2222:22
+scp -P 2222 ./scptest.txt root@localhost:/mnt/filestore
