@@ -1,4 +1,8 @@
-sadf -d aaa.bin -- -u > cpu.csv
-sadf -d aaa.bin -- -r > memory.csv
-sadf -d aaa.bin -- -d > disk.csv
-sadf -d aaa.bin -- -n DEV > network.csv
+sadf -d aaa.bin -- -u | awk -F',' '
+NR>1 && $4=="all" { sum+=$8; cnt++ }
+END { if(cnt>0) printf "CPU(all) idle average = %.2f%%\n", sum/cnt }'
+
+
+sadf -d aaa.bin -- -r | awk -F',' '
+NR>1 { sum+=$5; cnt++ }
+END { if(cnt>0) printf "Memory used average = %.2f%%\n", sum/cnt }'
