@@ -1,9 +1,20 @@
-jq -r '
- select(
-   (.timestamp >= "2025-12-23 20:00:00")
-   and
-   (.timestamp <  "2025-12-23 20:00:06")
-   and
-   (.path | startswith("/user/"))
- )
-' access.log | wc -l
+jq -s '
+  map(
+    select(
+      (.timestamp >= "2025-12-23 19:32:35")
+      and
+      (.timestamp <  "2025-12-23 19:34:15")
+      and
+      (
+        .path == "/user/"
+        or .path == "/user/re-post"
+        or .path == "/user/report"
+        or .path == "/user/distribution"
+        or .path == "/user/recruit"
+        or .path == "/search"
+        or .path == "/api"
+      )
+    )
+  )
+  | length
+' gd-access.2025-12-23T19.log
