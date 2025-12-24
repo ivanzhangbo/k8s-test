@@ -1,3 +1,9 @@
-grep '"timestamp":"2025-12-23 20:00:0[0-5]' access.log \
- | grep '"path":"/user/' \
- | wc -l
+jq -r '
+ select(
+   (.timestamp >= "2025-12-23 20:00:00")
+   and
+   (.timestamp <  "2025-12-23 20:00:06")
+   and
+   (.path | startswith("/user/"))
+ )
+' access.log | wc -l
