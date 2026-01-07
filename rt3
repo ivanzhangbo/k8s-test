@@ -1,4 +1,1 @@
-ACCESS_TOKEN=$(curl -s \
-  -H "Metadata-Flavor: Google" \
-  http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token \
-  | jq -r .access_token)
+https://docs.cloud.google.com/iam/docs/roles-permissions/container#container.developer
