@@ -1,1 +1,2 @@
-https://docs.cloud.google.com/iam/docs/roles-permissions/container#container.developer
+find ./rotate/ -printf '%P|%M|%u:%g\n' | sort
+diff -u
