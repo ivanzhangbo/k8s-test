@@ -1,2 +1,292 @@
-find ./rotate/ -printf '%P|%M|%u:%g\n' | sort
-diff -u
+#host,group,src_dir,include_glob,keep_glob,archive_name_template,backup_root,retention_days,require_files
+sv02,gd-app,/data/tkbbb01d/log/app,gd-app*.log,gd-app.log,gd-app.tar.gz,/data/tkbbb01d/log/app/savedir,1827,N
+sv02,gd-audit,/data/tkbbb01d/log/app,gd-audit*.log,gd-audit.log,gd-audit.tar.gz,/data/tkbbb01d/log/app/savedir,1827,N
+sv02,gd-journal,/data/tkbbb01d/log/app,gd-journal*.log,gd-journal.log,gd-journal.tar.gz,/data/tkbbb01d/log/app/savedir,1827,N
+sv02,gd-metrics,/data/tkbbb01d/log/app,gd-metrics*.log,gd-metrics.log,gd-metrics.tar.gz,/data/tkbbb01d/log/app/savedir,1827,N
+sv02,gd-sql-journal,/data/tkbbb01d/log/app,gd-sql-journal*.log,gd-sql-journal.log,gd-sql-journal.tar.gz,/data/tkbbb01d/log/app/savedir,1827,N
+sv02,gd-access,/data/tkbbb01d/log/app,gd-access.${YESTERDAY}T*.log,,gd-access.${YESTERDAY}.tar.gz,/data/tkbbb01d/log/app/savedir,1827,Y
+sv02,tomcat_access,/data/tkbbb01d/log/tomcat,tomcat_access_log*.log,,tomcat_access_log.tar.gz,/data/tkbbb01d/log/tomcat/savedir,366,N
+sv02,kiban_script,/data/tkbbb01d/log/kiban_batch,kiban_script*log,,kiban_script.tar.gz,/data/tkbbb01d/log/kiban_batch/savedir,366,N
+
+
+
+
+#!/bin/bash
+
+CONFIG_FILE="./log_rotation.conf"
+LOG_FILE="/data/$(whoami)/log/kiban_batch/kiban_script_log_rotation$(date '+%Y%m%d').log"
+
+ERROR_FLAG=0
+
+log_message() {
+  echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a "$LOG_FILE"
+}
+
+error_exit() {
+  log_message "ERROR: $1"
+  exit 1
+}
+
+[ ! -f "$CONFIG_FILE" ] && error_exit "設定ファイルが見つかりません: $CONFIG_FILE"
+
+HOSTNAME_NOW="$(hostname)"
+TODAY_YYYY="$(date '+%Y')"
+TODAY_MM="$(date '+%m')"
+TODAY_DD="$(date '+%d')"
+YESTERDAY="$(date -d 'yesterday' '+%Y-%m-%d')"   # GNU date 前提（CentOS/RHEL想定）
+
+log_message "ログローテーション開始 host=${HOSTNAME_NOW} yesterday=${YESTERDAY}"
+
+###############################################################################
+# Function: resolve_backup_dir
+# 概要:
+#   設定ファイルで指定されたbackup_rootを基に、当日の日付（YYYY/MM/DD）を付与した
+#   バックアップディレクトリのパスを生成する。本関数はディレクトリの作成は行わず、
+#   あくまでパス文字列の生成のみを行う。実際ディレクトリ作成は呼び出し元でmkdir -pより作成
+# 引数:
+#   1. backup_root (必須)
+#      - バックアップのルートディレクトリ
+#      - 例: /data/tkbbb01d/log/app/savedir
+# 出力例:
+#   /data/tkbbb01d/log/app/savedir/2026/01/07
+###############################################################################
+resolve_backup_dir() {
+  local backup_root="$1"
+  echo "${backup_root%/}/${TODAY_YYYY}/${TODAY_MM}/${TODAY_DD}"
+}
+
+###############################################################################
+# Function: expand_vars
+# 概要:
+#   設定ファイル内で使用されている変数表記（${YESTERDAY}）を、 実際の日付文字列に置換
+# 変換例:
+#   入力 : gd-access.${YESTERDAY}T*.log
+#   出力 : gd-access.2026-01-06T*.log
+# 引数:
+#   1. s (必須)
+#      - 変数置換対象の文字列
+# 戻り値:
+#   標準出力に置換後の文字列を出力する
+###############################################################################
+expand_vars() {
+  local s="$1"
+  s="${s//\$\{YESTERDAY\}/$YESTERDAY}"
+  echo "$s"
+}
+
+###############################################################################
+# Function: cleanup_old_backup_dirs
+# 概要:
+#   backup_root配下YYYY/MM/DD形式のバックアップディレクトリに、
+#   指定された保存期間（retention_days）を超えたディレクトリ単位で削除
+# 引数:
+#   1. backup_root (必須)
+#      - バックアップのルートディレクトリ
+#      - 例: /data/tkbbb01d/log/app/savedir
+#   2. retention_days (必須)
+#      - バックアップの保存日数
+#      - 例: 1827（約5年）, 366（約1年）
+# 動作:
+#   - backup_root/YYYY/MM/DD 形式のディレクトリを対象に検索
+#   - 最終更新日時（mtime）がretention_days を超えるものを削除
+# 注意:
+#   - 設定ファイルのbackup_rootの設定ミス防ぐためいに、backup_rootが空文字や "/" の場合は削除処理を行わない
+#   - それに削除対象フォルダが数字以外は削除対象外
+###############################################################################
+cleanup_old_backup_dirs() {
+  local backup_root="$1"
+  local retention_days="$2"
+
+  backup_root="${backup_root%/}"
+
+  if [[ -z "$backup_root" || "$backup_root" == "/" ]]; then
+    log_message "WARN: backup_root が不正なため削除処理をスキップ: '$backup_root'"
+    return 0
+  fi
+
+  log_message "古いバックアップディレクトリの削除開始 root=$backup_root retention=${retention_days}日"
+
+  find "$backup_root" \
+    -mindepth 3 -maxdepth 3 \
+    -type d \
+    -regextype posix-extended \
+    -regex ".*/20[0-9]{2}/[0-1][0-9]/[0-3][0-9]$" \
+    -mtime +$((retention_days-1)) \
+    -exec rm -rf {} + 2>/dev/null
+
+  log_message "古いバックアップディレクトリの削除完了 root=$backup_root"
+}
+
+###############################################################################
+# Function: create_tar_from_staging
+# 概要:
+#   stagingディレクトリ直下に集約されたファイルのみを対象に、tar.gz ファイルを作成
+# 引数:
+#   1. staging_dir (必須)
+#      - tar に含めるファイルが集約された staging ディレクトリ
+#      - 例: /data/tkbbb01d/log/savedir/2026/01/07/.staging_gd-access_<ランダムの数字>#
+#   2. out_file (必須)
+#      - 作成するtar.gzファイルのフルパス
+#      - 例: /data/tkbbb01d/log/savedir/2026/01/07/gd-access.2026-01-06.tar.gz
+# 戻り値:
+#   0 : 正常終了（tar.gz 作成成功）
+#   1 : 異常終了（stagingディレクトリ内に対象ファイルが存在しない）
+###############################################################################
+create_tar_from_staging() {
+  local staging_dir="$1"
+  local out_file="$2"
+
+  # staging 直下のファイル名だけをtarに入れる
+  mapfile -t files < <(find "$staging_dir" -maxdepth 1 -type f -printf "%f\n" 2>/dev/null)
+
+  if [[ ${#files[@]} -eq 0 ]]; then
+    return 1
+  fi
+
+  tar -C "$staging_dir" -czf "$out_file" "${files[@]}"
+}
+
+###############################################################################
+# Function: stage_files
+# 概要:
+#   対象ログファイルをstagingディレクトリ(tarに含める最終ファイルを集める場所)に集約し、
+#   設定ファイルで定義したkeep_globに一致するものはcp、それ以外はmv
+# 引数:
+#   1. src_dir (必須)
+#      - 元ログのディレクトリ
+#      - 例: /data/tkbbb01d/log/app
+#   2. keep_glob (任意)
+#      - 元ファイルを残すファイル名パターン
+#      - 例: gd-app.log、一致したファイルは cp（元を残す）、空の場合は全て mv（バックアップ後削除）
+#   3. staging_dir (必須)
+#      - コピー及び移動先ディレクトリ、tarに含める最終ファイルを集めるディレクトリ
+#      - 例: /data/tkbbb01d/log/savedir/2026/01/07/.staging_gd-access_<ランダムの数字>
+#   4. files... (必須)
+#      - 対象ファイルの実体配列（フルパス）
+#      - 例: /data/tkbbb01d/gd-app.log
+###############################################################################
+stage_files() {
+  local src_dir="$1"
+  local keep_glob="$2"
+  local staging_dir="$3"
+  shift 3
+  local files=("$@")
+
+  local keep_enabled=0
+  if [[ -n "$keep_glob" ]]; then
+    keep_enabled=1
+  fi
+
+  for f in "${files[@]}"; do
+    [[ -z "$f" ]] && continue
+
+    local bn
+    bn="$(basename "$f")"
+
+    if [[ $keep_enabled -eq 1 ]] && [[ "$bn" == $keep_glob ]]; then
+      if cp -p "$f" "$staging_dir/"; then
+        log_message "COPY: $f -> $staging_dir/$bn (keep)"
+      else
+        log_message "ERROR: コピー失敗: $f"
+      fi
+    else
+      if mv "$f" "$staging_dir/"; then
+        log_message "MOVE: $f -> $staging_dir/$bn"
+      else
+        log_message "ERROR: 移動失敗: $f"
+      fi
+    fi
+  done
+}
+
+# 設定ファイル読み込み1行ずつ処理
+while IFS=',' read -r host group src_dir include_glob keep_glob archive_tmpl backup_root retention_days require_files; do
+  if [[ -z "${host// }" || "$host" =~ ^# ]]; then
+    continue
+  fi
+
+  # スペース削除
+  host="$(echo "$host" | xargs)"
+  group="$(echo "$group" | xargs)"
+  src_dir="$(echo "$src_dir" | xargs)"
+  include_glob="$(echo "$include_glob" | xargs)"
+  keep_glob="$(echo "$keep_glob" | xargs)"
+  archive_tmpl="$(echo "$archive_tmpl" | xargs)"
+  backup_root="$(echo "$backup_root" | xargs)"
+  retention_days="$(echo "$retention_days" | xargs)"
+  require_files="$(echo "$require_files" | xargs)"
+
+  # ホストフィルター
+  if [[ "$HOSTNAME_NOW" != "$host" ]]; then
+    continue
+  fi
+
+  include_glob_expanded="$(expand_vars "$include_glob")"
+  archive_name="$(expand_vars "$archive_tmpl")"
+
+  backup_dir="$(resolve_backup_dir "$backup_root")"
+  archive_path="${backup_dir%/}/$archive_name"
+
+  log_message "==== group=$group src_dir=$src_dir include=$include_glob_expanded keep=$keep_glob backup=$archive_path ===="
+
+  # バックアップディレクトリ作成
+  if ! mkdir -p "$backup_dir"; then
+    log_message "ERROR: バックアップディレクトリ作成失敗: $backup_dir"
+    continue
+  fi
+
+  # 期間超過ディレクトリ削除
+  cleanup_old_backup_dirs "$backup_root" "$retention_days"
+
+  # nullglobでファイル一致しないときにfilesを空配列にする
+  shopt -s nullglob
+  files=( "$src_dir"/$include_glob_expanded )
+  shopt -u nullglob
+
+  real_files=()
+  for f in "${files[@]}"; do
+    [[ -f "$f" ]] && real_files+=( "$f" )
+  done
+
+  if [[ ${#real_files[@]} -eq 0 ]]; then
+    log_message "対象ファイルなし: ${src_dir}/${include_glob_expanded}"
+    if [[ "$require_files" == "Y" ]]; then
+      ERROR_FLAG=1
+    fi
+    continue
+  fi
+
+  # バックアップ対象ファイル一時保存ディレクトリ作成
+  staging_dir="${backup_dir%/}/.staging_${group}_$$$(date '+%H%M%S%N')"
+  if ! mkdir -p "$staging_dir"; then
+    log_message "ERROR: staging作成失敗: $staging_dir"
+    continue
+  fi
+
+  # バックアップ対象ファイル一時保存ディレクトリに集める
+  stage_files "$src_dir" "$keep_glob" "$staging_dir" "${real_files[@]}"
+
+  # バックアップ対象ファイルを圧縮
+  if create_tar_from_staging "$staging_dir" "$archive_path"; then
+    log_message "アーカイブ作成完了: $archive_path"
+    # 一時保存ディレクトリ削除
+    rm -f "$staging_dir"/* 2>/dev/null || true
+    rmdir "$staging_dir" 2>/dev/null || true
+  else
+    log_message "ERROR: アーカイブ作成失敗（stagingにファイルが無い可能性）: $archive_path"
+    log_message "WARN: 調査のためstagingを残します: $staging_dir"
+    if [[ "$require_files" == "Y" ]]; then
+      ERROR_FLAG=1
+    fi
+    continue
+  fi
+
+done < "$CONFIG_FILE"
+
+if [[ $ERROR_FLAG -gt 0 ]]; then
+  log_message "ERROR: 前日gd-accessログが見つからないため、エラー終了しました"
+  exit 1
+fi
+
+log_message "すべての処理が正常に完了しました"
+exit 0
