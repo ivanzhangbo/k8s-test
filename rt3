@@ -22,7 +22,7 @@ jpn021958,kiban_script,/data/tkbbb01d/log/kiban_batch,kiban_script${YESTERDAY}.l
 #!/bin/bash
 
 CONFIG_FILE="./log_rotation.conf"
-LOG_FILE="/data/$(whoami)/log/kiban_batch/kiban_script_log_rotation$(date '+%Y%m%d').log"
+LOG_FILE="/data/$(whoami)/log/kiban_batch/kiban_script_log_rotation$(date '+%Y-%m-%d').log"
 
 ERROR_FLAG=0
 
