@@ -1,6 +1,5 @@
-#サーバー名,対象ファイル,バックアップ先フォルダ名,バックアップ後ファイル名,対象日付フラグ,削除フラグ,保存期間
-#[NonProd]APサーバ
 #host,group,src_dir,include_glob,keep_glob,archive_name_template,backup_root,retention_days,require_files
+#[NonProd]APサーバ
 jpn022567,gd-app,/data/tkbbb01d/log/app,gd-app*.log,gd-app.log,gd-app.tar.gz,/data/tkbbb01d/log/app/savedir,1827,N
 jpn022567,gd-audit,/data/tkbbb01d/log/app,gd-audit*.log,gd-audit.log,gd-audit.tar.gz,/data/tkbbb01d/log/app/savedir,1827,N
 jpn022567,gd-journal,/data/tkbbb01d/log/app,gd-journal*.log,gd-journal.log,gd-journal.tar.gz,/data/tkbbb01d/log/app/savedir,1827,N
@@ -8,13 +7,13 @@ jpn022567,gd-metrics,/data/tkbbb01d/log/app,gd-metrics*.log,gd-metrics.log,gd-me
 jpn022567,gd-sql-journal,/data/tkbbb01d/log/app,gd-sql-journal*.log,gd-sql-journal.log,gd-sql-journal.tar.gz,/data/tkbbb01d/log/app/savedir,1827,N
 jpn022567,gd-access,/data/tkbbb01d/log/app,gd-access.${YESTERDAY}T*.log,,gd-access.${YESTERDAY}.tar.gz,/data/tkbbb01d/log/app/savedir,1827,Y
 jpn022567,tomcat_access,/data/tkbbb01d/log/tomcat,tomcat_access_log.${YESTERDAY}.log,,tomcat_access_log${YESTERDAY}.tar.gz,/data/tkbbb01d/log/tomcat/savedir,366,N
-jpn022567,kiban_script,/data/tkbbb01d/log/kiban_batch,kiban_script${YESTERDAY}.log,,kiban_script${YESTERDAY}.tar.gz,/data/tkbbb01d/log/kiban_batch/savedir,366,N
+jpn022567,kiban_script,/data/tkbbb01d/log/kiban_batch,kiban_script*${YESTERDAY}.log,,kiban_script${YESTERDAY}.tar.gz,/data/tkbbb01d/log/kiban_batch/savedir,366,N
 #[NonProd]Jobサーバ
 jpn021958,apl_batch,/data/tkbbb01d/log/apl_batch,gd-batch-info.log,,gd-batch-info.gz,/data/tkbbb01d/log/apl_batch/savedir,366,N
 jpn021958,apl_batch,/data/tkbbb01d/log/apl_batch,gd-batch-error.log,,gd-batch-error.gz,/data/tkbbb01d/log/apl_batch/savedir,366,N
 jpn021958,apl_batch,/data/tkbbb01d/log/apl_batch,gd-batch-sh-info.log,,gd-batch-sh-info.gz,/data/tkbbb01d/log/apl_batch/savedir,366,N
 jpn021958,apl_batch,/data/tkbbb01d/log/apl_batch,gd-batch-sh-error.log,,gd-batch-sh-error.gz,/data/tkbbb01d/log/apl_batch/savedir,366,N
-jpn021958,kiban_script,/data/tkbbb01d/log/kiban_batch,kiban_script${YESTERDAY}.log,,kiban_script${YESTERDAY}.tar.gz,/data/tkbbb01d/log/kiban_batch/savedir,366,N
+jpn021958,kiban_script,/data/tkbbb01d/log/kiban_batch,kiban_script*${YESTERDAY}.log,,kiban_script${YESTERDAY}.tar.gz,/data/tkbbb01d/log/kiban_batch/savedir,366,N
 
 
 
