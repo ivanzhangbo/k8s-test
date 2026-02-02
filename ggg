@@ -1,0 +1,122 @@
+#同期元,同期先
+/home/tkbbbujs/ThirdPartyProducts/,tkbbbujs@jpp022370:/home/tkbbbujs/ThirdPartyProducts/
+/home/tkbbbujs/WebRelease2/,tkbbbujs@jpp022370:/home/tkbbbujs/WebRelease2/
+/data/tkbbbujs/WebRelease2.storage/,tkbbbujs@jpp022370:/data/tkbbbujs/WebRelease2.storage/
+/data/tkbbbujs/cms/,tkbbbujs@jpp022370:/data/tkbbbujs/cms/
+
+
+#!/bin/bash
+CONF_FILE="/local/tkbbbujs/kiban_batch/logrotate/webrelease_sync_list.conf"
+GETKEY_CONF_FILE="/local/tkbbbujs/kiban_batch/logrotate/get_sshkey.conf"
+LOCK_FILE="/local/tkbbbujs/kiban_batch/logrotateroot/webrelease_sync.lock"
+LOG_FILE="/data/tkbbbujs/log/kiban_batch/kiban_script_datasync_webrelease$(date '+%Y-%m-%d').log"
+SSH_KEY="/tmp/temp_ssh_key_$(date +%s)"
+ERROR_FLAG=0
+ERROR_INFO=("")
+
+# ログ出力関数
+log_message() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a "$LOG_FILE"
+}
+
+# エラー処理
+error_exit() {
+    log_message "ERROR: $1"
+    exit 1
+}
+
+# ロック制御
+if [ -f "$LOCK_FILE" ]; then
+    log_message "同期スキップ中: 前回の処理がまだ実行中"
+    exit 0
+fi
+
+touch "$LOCK_FILE"
+log_message "同期処理実行開始"
+
+# conf読み込み
+if [ ! -f "$CONF_FILE" ]; then
+    rm -f "$LOCK_FILE"
+    error_exit "CSV設定ファイルがありません: $CONF_FILE"
+fi
+
+# sshkey取得conf読み込み
+if [ ! -f "$GETKEY_CONF_FILE" ]; then
+    rm -f "$LOCK_FILE"
+    error_exit "CSV設定ファイルがありません: $GETKEY_CONF_FILE"
+fi
+
+# Tokenの取得
+log_message　"SSH KEYトークンを取得開始。"
+TOKEN=$(curl -s -f \
+  --retry "$CURL_RETRY" --retry-delay "$CURL_RETRY_DELAY" \
+  --location --request POST "$TOKEN_URL" \
+  --header 'Content-Type: application/json' \
+  --data-raw "{
+    \"username\": \"$API_USER\",
+    \"password\": \"$API_PASS\",
+    \"concurrentSession\": \"true\"
+  }" | tr -d '"')
+
+# トークンが空またはnullの場合、後続処理を中断
+if [ -z "$TOKEN" ] || [ "$TOKEN" == "null" ]; then
+    error_exit "トークンの取得に失敗しました。ネットワーク設定または認証情報を確認してください。"
+fi
+
+log_message　"SSH KEYトークンを取得終了。"
+
+# SSH KEYダウンロード
+log_message　 "秘密鍵をダウンロード開始。"
+curl -s -f \
+  --retry "$CURL_RETRY" --retry-delay "$CURL_RETRY_DELAY" \
+  --location --request POST "$KEY_URL" \
+  --header "Authorization: $TOKEN" \
+  --header 'Content-Type: application/json' \
+  --data-raw '{"reason": "rsync", "ActionType": "download"}' > "$SSH_KEY"
+
+# Keyファイルが正しくダウンロードされたか（サイズが0でないか）を確認
+if [ ! -s "$SSH_KEY" ]; then
+    rm -f "$SSH_KEY"
+    error_exit　"秘密鍵のダウンロードに失敗(ファイルが空)。"
+fi
+
+log_message　"秘密鍵をダウンロード終了。"
+
+# KEYの権限の設定
+chmod 600 "$SSH_KEY"
+
+# 同期実施
+while IFS=',' read -r SRC DEST; do
+
+    # 空行またはコメント行(#)はスキップ
+    [[ -z "$SRC" || "$SRC" =~ ^# ]] && continue
+
+    SRC=$(echo "$SRC" | xargs)
+    DEST=$(echo "$DEST" | xargs)
+
+    log_message "同期開始: SRC=$SRC → DEST=$DEST"
+
+    # rsync実行
+    rsync -az --delete --rsh="ssh -i $SSH_KEY" "$SRC" "$DEST" >> "$LOG_FILE" 2>&1
+
+    if [ $? -eq 0 ]; then
+        log_message "同期成功: $SRC → $DEST"
+    else
+        log_message "同期失敗: $SRC → $DEST"
+        ERROR_FLAG=1
+        ERROR_INFO+=$SRC
+    fi
+done < "$CONF_FILE"
+
+# 終了処理
+log_message "同期処理実行終了"
+
+rm -f "$LOCK_FILE"
+rm -f "$SSH_KEY"
+
+if [[ $ERROR_FLAG -gt 0 ]]; then
+    error_exit "同期処理エラー終了しました、対象フォルダ: ${ERROR_INFO[@]}"
+else
+    log_message "同期処理が正常に完了しました"
+    exit 0
+fi
