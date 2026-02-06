@@ -1,1 +1,27 @@
-111111111111
+１．スクリプト配置
+ファイルサーバのCMS同期スクリプトを対象ディレクトリ配置する
+
+２．秘密鍵ファイル削除しないように設定
+datasync_webrelease.sh以下の行をコメントアウト（110行目）
+rm -f "$SSH_KEY"
+
+３．秘密鍵ダウンロード・スクリプト動作確認
+以下のコマンドでdatasync_webrelease.sh実行させる、パスワード要求された場合や「同期処理エラー」表示された場合、秘密鍵ファイル問題ある
+※パスワード要求された場合Ctrl+Cでキャンセル
+
+/local/tkbbbujs/kiban_batch/datasync_webrelease/datasync_webrelease.sh
+
+４．秘密鍵ファイルの最後改行ないこと確認
+以下のコマンドを実行して、「」後ろに$がないこと確認
+※$ある場合、改行あること意味する
+※date +%sは実行時間
+
+cat -e /tmp/tmp_ssh_key_$(date +%s)
+
+５．スクリプトに秘密鍵改行追加
+上記No4該当の場合、datasync_webrelease.sh以下の行の上に「echo "" >> $SSH_KEY"」を追加
+chmod 600 "$SSH_KEY"
+
+６．スクリプト再実行し同期できること確認
+
+７．No2のコメントアウト解除・No5追加した「echo "" >> $SSH_KEY"」を削除
