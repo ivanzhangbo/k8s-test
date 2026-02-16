@@ -1,6 +1,1 @@
-FNCメールサーバからProofPointサーバ（123.com）へのメール中継先変更を行います。
-Postfixの設定変更が発生するので、環境設計書の更新をお願いします。
-
-
-/etc/postfix/main.cf的设定值
-relayhost = 172.26.16.2→改成 relayhost = 123.com
+1212
