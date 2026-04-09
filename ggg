@@ -9,3 +9,15 @@ curl http://localhost:8080/v1/chat/completions \
     "temperature": 0.7,
     "max_tokens": 256
   }'
+
+
+curl -s http://127.0.0.1:8080/v1/chat/completions \
+    -H 'Content-Type: application/json' \
+    -d '{
+      "model": "local",
+      "messages": [
+        {"role": "user", "content": "Reply with exactly: pong"}
+      ],
+      "temperature": 0,
+      "stream": false
+    }'
