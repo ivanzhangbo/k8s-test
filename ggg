@@ -21,3 +21,7 @@ curl -s http://127.0.0.1:8080/v1/chat/completions \
       "temperature": 0,
       "stream": false
     }'
+
+
+Terraform Resourece
+GCP GCS
