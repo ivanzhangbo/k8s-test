@@ -1,1 +1,26 @@
-1
+defaultService: projects/PROJECT_ID/regions/asia-northeast2/backendServices/backend-default
+
+hostRules:
+- hosts:
+  - "your.example.com"
+  pathMatcher: allpaths
+
+pathMatchers:
+- name: allpaths
+  defaultService: projects/PROJECT_ID/regions/asia-northeast2/backendServices/backend-default
+  routeRules:
+  - priority: 10
+    matchRules:
+    - prefixMatch: /
+      headerMatches:
+      - headerName: X-App-Version
+        exactMatch: blue
+    service: projects/PROJECT_ID/regions/asia-northeast2/backendServices/backend-blue
+
+  - priority: 20
+    matchRules:
+    - prefixMatch: /
+      headerMatches:
+      - headerName: X-App-Version
+        exactMatch: green
+    service: projects/PROJECT_ID/regions/asia-northeast2/backendServices/backend-green
