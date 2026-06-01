@@ -1,26 +1,30 @@
-defaultService: projects/PROJECT_ID/regions/asia-northeast2/backendServices/backend-default
+cat > /etc/nginx/nginx.conf <<'EOF'
+events {}
 
-hostRules:
-- hosts:
-  - "your.example.com"
-  pathMatcher: allpaths
+http {
+    log_format header_debug
+        'remote_addr="$remote_addr" '
+        'request="$request" '
+        'status=$status '
+        'abc="$http_abc" '
+        'xff="$http_x_forwarded_for" '
+        'host="$host" '
+        'ua="$http_user_agent"';
 
-pathMatchers:
-- name: allpaths
-  defaultService: projects/PROJECT_ID/regions/asia-northeast2/backendServices/backend-default
-  routeRules:
-  - priority: 10
-    matchRules:
-    - prefixMatch: /
-      headerMatches:
-      - headerName: X-App-Version
-        exactMatch: blue
-    service: projects/PROJECT_ID/regions/asia-northeast2/backendServices/backend-blue
+    access_log /dev/stdout header_debug;
+    error_log /dev/stderr warn;
 
-  - priority: 20
-    matchRules:
-    - prefixMatch: /
-      headerMatches:
-      - headerName: X-App-Version
-        exactMatch: green
-    service: projects/PROJECT_ID/regions/asia-northeast2/backendServices/backend-green
+    server {
+        listen 80;
+
+        location /debug-abc {
+            default_type text/plain;
+            return 200 "abc=$http_abc\nxff=$http_x_forwarded_for\nhost=$host\n";
+        }
+
+        location / {
+            return 200 "ok\n";
+        }
+    }
+}
+EOF
