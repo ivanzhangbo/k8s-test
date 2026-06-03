@@ -32,3 +32,4 @@ EOF
 
 https://docs.cloud.google.com/load-balancing/docs/tcp/set-up-ext-reg-tcp-proxy-hybrid?hl=ja
 https://docs.cloud.google.com/load-balancing/docs/tcp/set-up-ext-reg-tcp-proxy-internet?hl=ja
+echo 'add_header Set-Cookie "my_cookie=my_value; Path=/;";' >> /etc/nginx/nginx.conf
