@@ -34,3 +34,4 @@ https://docs.cloud.google.com/load-balancing/docs/tcp/set-up-ext-reg-tcp-proxy-h
 https://docs.cloud.google.com/load-balancing/docs/tcp/set-up-ext-reg-tcp-proxy-internet?hl=ja
 echo 'add_header Set-Cookie "my_cookie=my_value; Path=/;";' >> /etc/nginx/nginx.conf
 curl -x http://127.0.0.1:7890 -X POST -H "Content-Type: application/json" -d "{\"name\":\"test\",\"age\":18}" https://example.com/api
+https://docs.cloud.google.com/managed-lustre/docs/performance?utm_source=chatgpt.com&hl=ja#gke
