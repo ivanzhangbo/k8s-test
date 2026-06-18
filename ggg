@@ -40,3 +40,4 @@ https://docs.cloud.google.com/managed-lustre/docs/performance?utm_source=chatgpt
 
 https://zenn.dev/yoshida12/articles/62b44dad6d73b9
 https://docs.cloud.google.com/load-balancing/docs/https/troubleshooting-ext-https-lbs?hl=ja
+kubectl get pods -n <namespace> -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{range .spec.volumes[*]}{.persistentVolumeClaim.claimName}{" "}{end}{"\n"}{end}' | grep PVC-NS-001
