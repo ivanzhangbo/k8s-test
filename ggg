@@ -9,3 +9,4 @@ kubectl get deploy -A -o json | jq -r '
   [$d, .name, (.resources.requests.cpu // "-"), (.resources.limits.cpu // "-")] |
   @tsv
 '
+kubectl get deploy <deployment-name> -n <namespace> -o yaml | grep -A10 -n "resources:"
