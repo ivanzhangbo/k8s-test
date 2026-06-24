@@ -1,3 +1,11 @@
-nginx keepalive_timeout fixes the normal idle connection reuse mismatch.
-terminationGracePeriodSeconds and drainingTimeoutSec fix graceful shutdown / endpoint removal issues.
-They are related to 503 investigation, but they are not mandatory prerequisites for changing nginx keepalive_timeout.
+kubectl get deploy -n <namespace> \
+  -o=jsonpath='{range .items[*]}{.metadata.name}{"\n"}{range .spec.template.spec.containers[*]}{"  "}{.name}{"\trequest="}{.resources.requests.cpu}{"\tlimit="}{.resources.limits.cpu}{"\n"}{end}{end}'
+
+
+kubectl get deploy -A -o json | jq -r '
+  .items[] |
+  .metadata.namespace + "/" + .metadata.name as $d |
+  .spec.template.spec.containers[] |
+  [$d, .name, (.resources.requests.cpu // "-"), (.resources.limits.cpu // "-")] |
+  @tsv
+'
