@@ -1,0 +1,33 @@
+name: NetBox Config Context MVP
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  get-config-context:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Ansible Core
+        run: python -m pip install ansible-core
+
+      - name: Validate repository contract
+        run: python -m unittest tests/test_netbox_mvp_contract.py -v
+
+      - name: Validate playbook syntax
+        run: ansible-playbook -i ansible/inventory.yml ansible/get_config_context.yml --syntax-check
+        env:
+          NETBOX_URL: ${{ vars.NETBOX_URL }}
+          NETBOX_TOKEN: ${{ secrets.NETBOX_TOKEN }}
+
+      - name: Retrieve effective config context
+        run: ansible-playbook -i ansible/inventory.yml ansible/get_config_context.yml
+        env:
+          NETBOX_URL: ${{ vars.NETBOX_URL }}
+          NETBOX_TOKEN: ${{ secrets.NETBOX_TOKEN }}

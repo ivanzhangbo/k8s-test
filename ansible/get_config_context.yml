@@ -1,0 +1,57 @@
+---
+- name: Read effective NetBox config context
+  hosts: localhost
+  gather_facts: false
+  vars:
+    netbox_url: "{{ lookup('ansible.builtin.env', 'NETBOX_URL') | regex_replace('/$', '') }}"
+    netbox_token: "{{ lookup('ansible.builtin.env', 'NETBOX_TOKEN') }}"
+    device_name: mvp-router-01
+  tasks:
+    - name: Validate required environment variables
+      ansible.builtin.assert:
+        that:
+          - netbox_url | length > 0
+          - netbox_token | length > 0
+        fail_msg: NETBOX_URL and NETBOX_TOKEN must both be set
+
+    - name: Find the demo device
+      ansible.builtin.uri:
+        url: "{{ netbox_url }}/api/dcim/devices/?name={{ device_name | urlencode }}"
+        method: GET
+        headers:
+          Authorization: "Token {{ netbox_token }}"
+          Accept: application/json
+        return_content: true
+        status_code: 200
+        validate_certs: true
+      register: device_query
+
+    - name: Require exactly one demo device
+      ansible.builtin.assert:
+        that:
+          - device_query.json.count == 1
+        fail_msg: >-
+          Expected exactly one device named {{ device_name }},
+          found {{ device_query.json.count | default('unknown') }}
+
+    - name: Read the device with effective config context
+      ansible.builtin.uri:
+        url: "{{ device_query.json.results[0].url }}?include=config_context"
+        method: GET
+        headers:
+          Authorization: "Token {{ netbox_token }}"
+          Accept: application/json
+        return_content: true
+        status_code: 200
+        validate_certs: true
+      register: device_detail
+
+    - name: Require the effective context field
+      ansible.builtin.assert:
+        that:
+          - device_detail.json.config_context is defined
+        fail_msg: NetBox did not return config_context for the demo device
+
+    - name: Show the effective config context
+      ansible.builtin.debug:
+        var: device_detail.json.config_context
