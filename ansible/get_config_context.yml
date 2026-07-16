@@ -4,14 +4,14 @@
   gather_facts: false
   vars:
     netbox_url: "{{ lookup('ansible.builtin.env', 'NETBOX_URL') | regex_replace('/$', '') }}"
-    netbox_token: "{{ lookup('ansible.builtin.env', 'NETBOX_TOKEN') }}"
+    netbox_auth_header: "{{ lookup('ansible.builtin.env', 'NETBOX_TOKEN') }}"
     device_name: mvp-router-01
   tasks:
     - name: Validate required environment variables
       ansible.builtin.assert:
         that:
           - netbox_url | length > 0
-          - netbox_token | length > 0
+          - netbox_auth_header | length > 0
         fail_msg: NETBOX_URL and NETBOX_TOKEN must both be set
 
     - name: Find the demo device
@@ -19,7 +19,7 @@
         url: "{{ netbox_url }}/api/dcim/devices/?name={{ device_name | urlencode }}"
         method: GET
         headers:
-          Authorization: "Bearer {{ netbox_token }}"
+          Authorization: "{{ netbox_auth_header }}"
           Accept: application/json
         return_content: true
         status_code: 200
@@ -39,7 +39,7 @@
         url: "{{ device_query.json.results[0].url }}?include=config_context"
         method: GET
         headers:
-          Authorization: "Bearer {{ netbox_token }}"
+          Authorization: "{{ netbox_auth_header }}"
           Accept: application/json
         return_content: true
         status_code: 200

@@ -20,13 +20,15 @@ The repository uses:
 - Repository variable `NETBOX_URL`
 - Repository secret `NETBOX_TOKEN`
 
+`NETBOX_TOKEN` stores the complete authorization string shown once by NetBox.
+
 Run **Actions → NetBox Config Context MVP → Run workflow**. The runner installs `ansible-core`, validates the playbook, retrieves `mvp-router-01` with `include=config_context`, and prints only its effective context.
 
 ### Run locally
 
 ```bash
 export NETBOX_URL=https://jlrj8132.cloud.netboxapp.com
-export NETBOX_TOKEN='replace-with-a-read-only-token'
+export NETBOX_TOKEN='Bearer nbt_<key>.<token>'
 python -m pip install ansible-core
 ansible-playbook -i ansible/inventory.yml ansible/get_config_context.yml
 ```
