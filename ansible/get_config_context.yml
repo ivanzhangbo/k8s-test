@@ -19,7 +19,7 @@
         url: "{{ netbox_url }}/api/dcim/devices/?name={{ device_name | urlencode }}"
         method: GET
         headers:
-          Authorization: "Token {{ netbox_token }}"
+          Authorization: "Bearer {{ netbox_token }}"
           Accept: application/json
         return_content: true
         status_code: 200
@@ -39,7 +39,7 @@
         url: "{{ device_query.json.results[0].url }}?include=config_context"
         method: GET
         headers:
-          Authorization: "Token {{ netbox_token }}"
+          Authorization: "Bearer {{ netbox_token }}"
           Accept: application/json
         return_content: true
         status_code: 200
