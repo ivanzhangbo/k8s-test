@@ -1,12 +1,12 @@
-kubectl get deploy -n <namespace> \
-  -o=jsonpath='{range .items[*]}{.metadata.name}{"\n"}{range .spec.template.spec.containers[*]}{"  "}{.name}{"\trequest="}{.resources.requests.cpu}{"\tlimit="}{.resources.limits.cpu}{"\n"}{end}{end}'
-
-
-kubectl get deploy -A -o json | jq -r '
-  .items[] |
-  .metadata.namespace + "/" + .metadata.name as $d |
-  .spec.template.spec.containers[] |
-  [$d, .name, (.resources.requests.cpu // "-"), (.resources.limits.cpu // "-")] |
-  @tsv
-'
-kubectl get deploy <deployment-name> -n <namespace> -o yaml | grep -A10 -n "resources:"
+<%@ page import="org.apache.catalina.util.ServerInfo" %>
+<html>
+<head><title>Tomcat Version</title></head>
+<body>
+<h3>Tomcat Version Info</h3>
+<pre>
+Server Info: <%= ServerInfo.getServerInfo() %>
+Server Built: <%= ServerInfo.getServerBuilt() %>
+Server Number: <%= ServerInfo.getServerNumber() %>
+</pre>
+</body>
+</html>
